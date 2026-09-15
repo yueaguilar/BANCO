@@ -1,0 +1,127 @@
+.inicio{
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.22),
+        rgba(255, 255, 255, 0.08)
+    );
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 24px;
+    box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+    padding: 30px;
+    color: #90e0ef;
+    position: relative;
+    left: 26.5%;
+    text-align: center;
+    overflow: hidden;
+    width: 600px;
+}
+body{
+    background-color: #0d1b2a;
+}
+#titulo::after {
+    content: "";
+    display: inline-block;
+    width: 200px;
+    height: 100px;
+    background-image: url("../aseets/logo.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    vertical-align: middle;
+    margin-left: 8px;
+}
+/* Botón Liquid Glass (puede aplicarse a <button> o <a>) */
+.correo.liquid-glass-btn {
+    /*Efecto Liquid Glass Base (Conservado) */
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.22),
+        rgba(255, 255, 255, 0.08)
+    );
+    width: 630px;
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 24px;
+    box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+    color:#cad2c5;
+    overflow: hidden;
+    position: relative;
+
+    /* Ajustes específicos para que funcione como BOTÓN */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 28px;        /* Relleno balanceado para un botón */
+    font-size: 16px;           /* Tamaño de texto adecuado */
+    font-weight: 600;          /* Texto un poco más grueso para legibilidad */
+    cursor: pointer;           /* Cambia el cursor a la "manita" al pasar sobre él */
+    outline: none;             /* Quita el borde por defecto del navegador */
+    text-decoration: none;     /* Por si decides usarlo en una etiqueta <a> */
+    transition: all 0.3s ease; /* Suaviza las transiciones de los efectos */
+    
+    /* Variables de ancho eliminadas para que el botón se adapte a su texto. 
+       Si necesitas centrarlo, usa el contenedor padre. */
+}
+
+/* Inputs con estética Liquid Glass */
+input.liquid-glass-input, textarea.liquid-glass-input, select.liquid-glass-input {
+    background: linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0.08));
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.5);
+    color: #cad2c5;
+    padding: 12px 14px;
+    width: 100%;
+    outline: none;
+    transition: all .2s ease;
+}
+
+/* Hover / Focus para inputs */
+input.liquid-glass-input:hover, textarea.liquid-glass-input:hover, select.liquid-glass-input:hover,
+input.liquid-glass-input:focus, textarea.liquid-glass-input:focus, select.liquid-glass-input:focus {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 40px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.6);
+    border-color: #cad2c5;
+}
+
+/* Hover/active para botones liquid glass (corregido selector) */
+.correo.liquid-glass-btn:hover {
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.32), /* Un poco más brillante */
+        rgba(255, 255, 255, 0.15)
+    );
+    box-shadow:
+        0 12px 45px rgba(0, 0, 0, 0.4), /* Sombra exterior ligeramente más profunda */
+        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px); /* Pequeño salto que da sensación de flotación */
+
+}
+
+/* Efecto al hacer clic (Active) */
+.correo.liquid-glass-btn:active, input.liquid-glass-input:active {
+    transform: translateY(1px); /* Se hunde ligeramente simulanado una pulsación */
+    box-shadow:
+        0 5px 20px rgba(0, 0, 0, 0.2), /* La sombra se reduce al "tocar" el fondo */
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Contenedor del formulario */
+.info{max-width:600px;margin:18px auto;padding:20px;display:flex;color:#cad2c5;flex-direction:column;gap:18px}
+
+/* Form layout: aumentar separación entre campos */
+.login-form{display:flex;flex-direction:column;gap:18px}
+.login-form .liquid-glass-input{width:100%;}
+

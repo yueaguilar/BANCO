@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>LCDK</title>
+        <link rel="icon" type="image/png" href="../aseets/logo2.png">
+        <link rel="stylesheet" href="../css/app.css">
+    </head>
+    <body>
+        <header class="topbar">
+            <div class="topbar-inner">
+                <img src="../aseets/logo2.png" alt="logo" class="logo">
+                <h1 class="brand">LCDKK</h1>
+                <button id="profileBtn" class="icon-btn">Perfil</button>
+            </div>
+            
+        </header>
+        
+        <main class="container">
+            <section class="balance-card">
+                <div class="balance-left">
+                    <p class="small">Saldo disponible</p>
+                    <h2 id="balance">$ 12.345,67</h2>
+                </div>
+                <div class="balance-right">
+                    <button class="primary" id="pagarBtn">Pagar</button>
+                    <button class="outline" id="transferirBtn">Transferir</button>
+                </div>
+            </section>
+
+            <section class="quick-actions">
+                <button class="action" id="cargarBtn">Cargar</button>
+                <button class="action" id="recargarBtn">Recargar celular</button>
+                <button class="action" id="serviciosBtn">Servicios</button>
+                <button class="action" id="qrBtn">Escanear QR</button>
+            </section>
+
+            <section class="transactions">
+                <div class="transactions-header">
+                    <h3>Últimas actividades</h3>
+                    <button id="verTodas" class="link-btn">Ver Todas</button>
+                </div>
+                <ul id="txList" class="tx-list">
+                    <!-- transacciones renderizadas por JS -->
+                </ul>
+            </section>
+        </main>
+
+        <nav class="bottom-nav">
+            <button class="nav-item active">Inicio</button>
+            <button class="nav-item">Movimientos</button>
+            <button class="nav-item">Tarjetas</button>
+            <button class="nav-item">Más</button>
+        </nav>
+
+        <div id="modal" class="modal hidden">
+            <div class="modal-panel">
+                <button id="closeModal" class="close">×</button>
+                <h3>Historial completo</h3>
+                <ul id="modalList" class="tx-list"></ul>
+            </div>
+        </div>
+
+        <script src="../js/app.js"></script>
+    </body>
+</html>
