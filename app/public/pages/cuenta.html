@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>LCDK | Cuenta</title>
+        <link rel="icon" type="image/png" href="../aseets/logo2.png">
+        <link rel="stylesheet" href="../css/cuenta.css">
+    </head>
+    <body>
+        <header class="topbar">
+            <div class="topbar-inner">
+                <a href="app.html" aria-label="Ir al inicio"><img src="../aseets/logo2.png" alt="logo" class="logo"></a>
+                <h1 class="brand">LCDKK</h1>
+                <a href="cuenta.html" class="icon-btn">Perfil</a>
+            </div>
+        </header>
+
+        <main class="page-shell">
+            <section class="profile-header glass-card">
+                <div class="profile-meta">
+                    <div class="avatar">LM</div>
+                    <div>
+                        <p class="eyebrow">Cuenta principal</p>
+                        <h2>Lucía Mendez</h2>
+                    </div>
+                </div>
+                <span class="account-badge">Activa</span>
+            </section>
+
+            <section class="main-card glass-card">
+                <div class="account-header">
+                    <div>
+                        <p class="label">Saldo disponible</p>
+                        <h3 class="balance">$ 12.345,67</h3>
+                    </div>
+                    <button class="ghost-btn" type="button">Ver detalle</button>
+                </div>
+
+                <div class="account-number-row">
+                    <span>Cuenta</span>
+                    <strong>**** 4521</strong>
+                </div>
+
+                <div class="action-row">
+                    <button class="action-btn primary-btn" type="button">Enviar</button>
+                    <button class="action-btn ghost-btn" type="button">Recibir</button>
+                    <button class="action-btn ghost-btn" type="button">Recargar</button>
+                </div>
+            </section>
+
+            <section class="summary-grid">
+                <article class="stat-card glass-card">
+                    <span class="label">Ingresos</span>
+                    <strong class="positive">+$4.260</strong>
+                    <small>Este mes</small>
+                </article>
+
+                <article class="stat-card glass-card">
+                    <span class="label">Gastos</span>
+                    <strong class="negative">-$1.480</strong>
+                    <small>Este mes</small>
+                </article>
+
+                <article class="stat-card glass-card highlight">
+                    <span class="label">Objetivo</span>
+                    <strong>$7.500</strong>
+                    <small>Meta de ahorro</small>
+                </article>
+            </section>
+
+            <section class="panel glass-card">
+                <div class="panel-header">
+                    <h3>Mis tarjetas</h3>
+                    <button class="link-btn" type="button">Agregar</button>
+                </div>
+
+                <div class="cards-list">
+                    <article class="credit-card card-primary">
+                        <div class="card-top">
+                            <span class="chip"></span>
+                            <span class="card-brand">LCDK</span>
+                        </div>
+                        <strong>•••• 4521</strong>
+                        <div class="card-bottom">
+                            <span>Lucía Mendez</span>
+                            <span>08/30</span>
+                        </div>
+                    </article>
+
+                    <article class="mini-card">
+                        <span class="mini-label">Ahorro</span>
+                        <strong>$3.940</strong>
+                    </article>
+                </div>
+            </section>
+
+            <section class="panel glass-card">
+                <div class="panel-header">
+                    <h3>Últimas actividades</h3>
+                    <button class="link-btn" type="button">Ver todo</button>
+                </div>
+
+                <ul class="transaction-list">
+                    <li class="transaction-item">
+                        <div class="transaction-left">
+                            <span class="transaction-icon income">S</span>
+                            <div>
+                                <strong>Salario</strong>
+                                <small>Transferencia recibida</small>
+                            </div>
+                        </div>
+                        <div class="transaction-right">
+                            <span class="amount positive">+$2.400</span>
+                            <small>Hoy</small>
+                        </div>
+                    </li>
+
+                    <li class="transaction-item">
+                        <div class="transaction-left">
+                            <span class="transaction-icon expense">M</span>
+                            <div>
+                                <strong>Mercado</strong>
+                                <small>Pago de supermercado</small>
+                            </div>
+                        </div>
+                        <div class="transaction-right">
+                            <span class="amount negative">-$420</span>
+                            <small>Ayer</small>
+                        </div>
+                    </li>
+
+                    <li class="transaction-item">
+                        <div class="transaction-left">
+                            <span class="transaction-icon transfer">T</span>
+                            <div>
+                                <strong>Transferencia</strong>
+                                <small>Enviado a Ana</small>
+                            </div>
+                        </div>
+                        <div class="transaction-right">
+                            <span class="amount negative">-$180</span>
+                            <small>08 Sep</small>
+                        </div>
+                    </li>
+                </ul>
+            </section>
+        </main>
+
+        <nav class="bottom-nav">
+            <span class="nav-indicator" aria-hidden="true"></span>
+            <a href="app.html" class="nav-item">Inicio</a>
+            <a href="movimientos.html" class="nav-item">Movimientos</a>
+            <a href="cuenta.html" class="nav-item active">Cuenta</a>
+            <a href="mas.html" class="nav-item">Más</a>
+        </nav>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const nav = document.querySelector('.bottom-nav');
+                const indicator = nav?.querySelector('.nav-indicator');
+                const items = Array.from(nav?.querySelectorAll('.nav-item') || []);
+                if (!nav || !indicator || !items.length) return;
+
+                const moveIndicator = (target) => {
+                    const navRect = nav.getBoundingClientRect();
+                    const targetRect = target.getBoundingClientRect();
+                    indicator.style.width = `${targetRect.width}px`;
+                    indicator.style.transform = `translateX(${targetRect.left - navRect.left}px)`;
+                };
+
+                const current = items.find(item => item.classList.contains('active')) || items[0];
+                moveIndicator(current);
+
+                window.addEventListener('resize', () => {
+                    const active = document.querySelector('.nav-item.active') || items[0];
+                    moveIndicator(active);
+                });
+
+                items.forEach((item) => {
+                    item.addEventListener('click', () => {
+                        items.forEach((el) => el.classList.remove('active'));
+                        item.classList.add('active');
+                        moveIndicator(item);
+                    });
+                });
+            });
+        </script>
+    </body>
+</html>
