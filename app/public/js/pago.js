@@ -43,13 +43,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   quickPayBtn.addEventListener('click', () => {
-    amountInput.value = '450.20';
-    conceptInput.value = 'Pago de supermercado';
+    amountInput.value = '';
+    conceptInput.value = '';
     updateSummary();
   });
 
   changeDestinyBtn.addEventListener('click', () => {
-    const destinations = ['Supermercado', 'Gasolinera', 'Servicio eléctrico', 'Colegio'];
+    const destinations = ['Nuevo destino', 'Supermercado', 'Gasolinera', 'Servicio eléctrico', 'Colegio'];
     const currentIndex = destinations.indexOf(destinoLabel.textContent.trim());
     const nextIndex = (currentIndex + 1) % destinations.length;
     destinoLabel.textContent = destinations[nextIndex];

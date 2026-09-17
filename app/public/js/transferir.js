@@ -14,8 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const successModal = document.getElementById('successModal');
   const quickTransferBtn = document.getElementById('quickTransferBtn');
   const changeContactBtn = document.getElementById('changeContactBtn');
-
-  const contacts = ['Lucía García', 'Martín Pérez', 'Ana López', 'Florencia Gómez'];
+  const qrShareBtn = document.getElementById('qrShareBtn');
+  const scanQrBtn = document.getElementById('scanQrBtn');
 
   const formatCurrency = (value) => {
     const amount = Number(value || 0);
@@ -38,22 +38,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
   amountInput.addEventListener('input', updateSummary);
 
-  quickTransferBtn.addEventListener('click', () => {
-    amountInput.value = '3200';
-    recipientInput.value = 'lucia.garcia';
-    accountNumberInput.value = '1234567890';
-    conceptInput.value = 'Pago de alquiler';
-    destinatarioLabel.textContent = 'Lucía García';
+  quickTransferBtn?.addEventListener('click', () => {
+    amountInput.value = '';
+    recipientInput.value = '';
+    accountNumberInput.value = '';
+    conceptInput.value = '';
+    destinatarioLabel.textContent = 'Nuevo destinatario';
     updateSummary();
   });
 
-  changeContactBtn.addEventListener('click', () => {
-    const currentIndex = contacts.indexOf(destinatarioLabel.textContent.trim());
-    const nextIndex = (currentIndex + 1) % contacts.length;
-    const nextContact = contacts[nextIndex];
-    destinatarioLabel.textContent = nextContact;
-    recipientInput.value = nextContact.toLowerCase().replace(/\s+/g, '.');
-    accountNumberInput.value = String(Math.floor(Math.random() * 9000000000) + 1000000000);
+  qrShareBtn?.addEventListener('click', () => {
+    const payload = {
+      destinatario: destinatarioLabel.textContent.trim() || 'Destinatario',
+      alias: recipientInput.value.trim() || '',
+      cuenta: accountNumberInput.value.trim() || '',
+      concepto: conceptInput.value.trim() || 'Transferencia',
+      monto: Number(amountInput.value || 0),
+      moneda: 'ARS'
+    };
+
+    const encoded = encodeURIComponent(JSON.stringify(payload));
+    window.location.href = `qr.html?data=${encoded}`;
+  });
+
+  scanQrBtn?.addEventListener('click', () => {
+    window.location.href = 'scan.html';
+  });
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const preloaded = urlParams.get('data');
+  if (preloaded) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(preloaded));
+      if (parsed.monto) amountInput.value = String(parsed.monto);
+      if (parsed.alias) recipientInput.value = parsed.alias;
+      if (parsed.cuenta) accountNumberInput.value = parsed.cuenta;
+      if (parsed.concepto) conceptInput.value = parsed.concepto;
+      if (parsed.destinatario) destinatarioLabel.textContent = parsed.destinatario;
+      updateSummary();
+    } catch (err) {
+      console.error('No se pudo leer datos pre cargados:', err);
+    }
+  }
+
+  changeContactBtn?.addEventListener('click', () => {
+    destinatarioLabel.textContent = 'Nuevo destinatario';
+    recipientInput.value = '';
+    accountNumberInput.value = '';
   });
 
   cancelBtn.addEventListener('click', () => {

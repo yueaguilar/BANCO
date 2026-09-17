@@ -12,12 +12,17 @@
             <h1 id="titulo">Inicio de sesion o Regsitro de nueva cuenta</h1>
         </div>
         <div class="info">
-            <form class="login-form" action="app.html" method="get">
-                <input class="correo liquid-glass-input" type="email" name="email" placeholder="Correo electrónico" required>
-                <input class="liquid-glass-input" type="text" name="fullname" placeholder="Nombre completo" required>
+            <form id="auth-form" class="login-form">
+                <input id="email" class="correo liquid-glass-input" type="email" name="email" placeholder="Correo electrónico" required>
+                <input id="fullname" class="liquid-glass-input" type="text" name="fullname" placeholder="Nombre completo">
                 <label class="small">Fecha de nacimiento</label>
-                <input class="liquid-glass-input" type="date" name="birthdate">
-                <input class="liquid-glass-input" type="password" name="password" placeholder="Contraseña" required>
+                <input id="birthdate" class="liquid-glass-input" type="date" name="birthdate">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input id="password" class="liquid-glass-input" type="password" name="password" placeholder="Contraseña" required>
+                    <label style="font-size:0.9rem;display:flex;align-items:center;gap:6px;">
+                        <input id="toggle-password" type="checkbox"> Mostrar
+                    </label>
+                </div>
                 <button type="submit" class="correo liquid-glass-btn">Crear cuenta / Iniciar sesión</button>
             </form>
         </div>

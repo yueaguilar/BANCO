@@ -22,7 +22,7 @@
                     <div class="avatar">LM</div>
                     <div>
                         <p class="eyebrow">Cuenta principal</p>
-                        <h2>Lucía Mendez</h2>
+                        <h2>Cargando nombre...</h2>
                     </div>
                 </div>
                 <span class="account-badge">Activa</span>
@@ -32,14 +32,19 @@
                 <div class="account-header">
                     <div>
                         <p class="label">Saldo disponible</p>
-                        <h3 class="balance">$ 12.345,67</h3>
+                        <h3 class="balance">Cargando saldo...</h3>
                     </div>
                     <button class="ghost-btn" type="button">Ver detalle</button>
                 </div>
 
                 <div class="account-number-row">
                     <span>Cuenta</span>
-                    <strong>**** 4521</strong>
+                    <strong id="accountNumberDisplay">****</strong>
+                </div>
+
+                <div class="account-number-row">
+                    <span>NIP</span>
+                    <strong id="nipDisplay">****</strong>
                 </div>
 
                 <div class="action-row">
@@ -52,19 +57,19 @@
             <section class="summary-grid">
                 <article class="stat-card glass-card">
                     <span class="label">Ingresos</span>
-                    <strong class="positive">+$4.260</strong>
+                    <strong class="positive">$0,00</strong>
                     <small>Este mes</small>
                 </article>
 
                 <article class="stat-card glass-card">
                     <span class="label">Gastos</span>
-                    <strong class="negative">-$1.480</strong>
+                    <strong class="negative">$0,00</strong>
                     <small>Este mes</small>
                 </article>
 
                 <article class="stat-card glass-card highlight">
                     <span class="label">Objetivo</span>
-                    <strong>$7.500</strong>
+                    <strong>$0,00</strong>
                     <small>Meta de ahorro</small>
                 </article>
             </section>
@@ -81,16 +86,16 @@
                             <span class="chip"></span>
                             <span class="card-brand">LCDK</span>
                         </div>
-                        <strong>•••• 4521</strong>
+                        <strong>••••</strong>
                         <div class="card-bottom">
-                            <span>Lucía Mendez</span>
-                            <span>08/30</span>
+                            <span>Titular</span>
+                            <span>00/00</span>
                         </div>
                     </article>
 
                     <article class="mini-card">
                         <span class="mini-label">Ahorro</span>
-                        <strong>$3.940</strong>
+                        <strong>$0,00</strong>
                     </article>
                 </div>
             </section>
@@ -101,46 +106,18 @@
                     <button class="link-btn" type="button">Ver todo</button>
                 </div>
 
-                <ul class="transaction-list">
-                    <li class="transaction-item">
+                <ul class="transaction-list" id="transactionList">
+                    <li class="transaction-item empty-state">
                         <div class="transaction-left">
-                            <span class="transaction-icon income">S</span>
+                            <span class="transaction-icon transfer">-</span>
                             <div>
-                                <strong>Salario</strong>
-                                <small>Transferencia recibida</small>
+                                <strong>Sin movimientos aún</strong>
+                                <small>Tu historial aparecerá aquí</small>
                             </div>
                         </div>
                         <div class="transaction-right">
-                            <span class="amount positive">+$2.400</span>
+                            <span class="amount">$0,00</span>
                             <small>Hoy</small>
-                        </div>
-                    </li>
-
-                    <li class="transaction-item">
-                        <div class="transaction-left">
-                            <span class="transaction-icon expense">M</span>
-                            <div>
-                                <strong>Mercado</strong>
-                                <small>Pago de supermercado</small>
-                            </div>
-                        </div>
-                        <div class="transaction-right">
-                            <span class="amount negative">-$420</span>
-                            <small>Ayer</small>
-                        </div>
-                    </li>
-
-                    <li class="transaction-item">
-                        <div class="transaction-left">
-                            <span class="transaction-icon transfer">T</span>
-                            <div>
-                                <strong>Transferencia</strong>
-                                <small>Enviado a Ana</small>
-                            </div>
-                        </div>
-                        <div class="transaction-right">
-                            <span class="amount negative">-$180</span>
-                            <small>08 Sep</small>
                         </div>
                     </li>
                 </ul>
@@ -186,5 +163,6 @@
                 });
             });
         </script>
+        <script src="../js/cuenta.js"></script>
     </body>
 </html>

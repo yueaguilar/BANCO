@@ -23,14 +23,18 @@
                     <p class="eyebrow">Transferencia</p>
                     <h2>Nueva transferencia</h2>
                 </div>
-                <button class="tag-btn" id="quickTransferBtn" type="button">Transferencia rápida</button>
+                <div class="header-actions">
+                    <button class="tag-btn" id="quickTransferBtn" type="button">Transferencia rápida</button>
+                    <button class="tag-btn" id="qrShareBtn" type="button">Generar QR</button>
+                    <button class="tag-btn" id="scanQrBtn" type="button">Escanear QR</button>
+                </div>
             </section>
 
             <section class="transfer-card">
                 <div class="destination-row">
                     <div class="destination-meta">
                         <span class="label">Destinatario</span>
-                        <strong id="destinatarioLabel">Lucía García</strong>
+                        <strong id="destinatarioLabel">Destinatario</strong>
                     </div>
                     <button class="chip-btn" id="changeContactBtn" type="button">Cambiar</button>
                 </div>
@@ -38,22 +42,22 @@
                 <label class="field-label" for="amountInput">Monto</label>
                 <div class="amount-box">
                     <span class="currency">$</span>
-                    <input id="amountInput" type="number" min="1" step="0.01" value="3200" placeholder="0,00">
+                    <input id="amountInput" type="number" min="1" step="0.01" value="" placeholder="0,00">
                 </div>
 
                 <label class="field-label" for="recipientInput">Alias / CVU</label>
-                <input id="recipientInput" class="text-input" type="text" value="lucia.garcia" maxlength="40">
+                <input id="recipientInput" class="text-input" type="text" value="" maxlength="40" placeholder="Ingresá el alias">
 
                 <label class="field-label" for="accountNumberInput">Número de cuenta</label>
-                <input id="accountNumberInput" class="text-input" type="text" inputmode="numeric" pattern="[0-9]*" value="1234567890" maxlength="20" placeholder="Ingresá el número de cuenta">
+                <input id="accountNumberInput" class="text-input" type="text" inputmode="numeric" pattern="[0-9]*" value="" maxlength="20" placeholder="Ingresá el número de cuenta">
 
                 <label class="field-label" for="conceptInput">Concepto</label>
-                <input id="conceptInput" class="text-input" type="text" value="Pago de alquiler" maxlength="40">
+                <input id="conceptInput" class="text-input" type="text" value="" maxlength="40" placeholder="Ingresá un concepto">
 
                 <div class="summary-box">
                     <div class="summary-line">
                         <span>Monto</span>
-                        <strong id="summaryAmount">$ 3.200,00</strong>
+                        <strong id="summaryAmount">$ 0,00</strong>
                     </div>
                     <div class="summary-line">
                         <span>Comisión</span>
@@ -61,7 +65,7 @@
                     </div>
                     <div class="summary-line total">
                         <span>Total</span>
-                        <strong id="summaryTotal">$ 3.200,00</strong>
+                        <strong id="summaryTotal">$ 0,00</strong>
                     </div>
                 </div>
             </section>
@@ -76,7 +80,7 @@
             <div class="success-card">
                 <div class="success-icon">✓</div>
                 <h3>¡Transferencia realizada!</h3>
-                <p id="successMessage">Tu transferencia de $ 3.200,00 fue enviada.</p>
+                <p id="successMessage">Tu transferencia será confirmada.</p>
                 <button id="backHomeBtn" type="button" class="primary-btn full">Volver al inicio</button>
             </div>
         </div>

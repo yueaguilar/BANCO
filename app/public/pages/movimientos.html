@@ -28,15 +28,15 @@
             <section class="summary-grid">
                 <article class="glass-card stat-card">
                     <span class="label">Ingresos</span>
-                    <strong class="positive">+$4.260</strong>
+                    <strong class="positive" id="ingresosTotal">$0,00</strong>
                 </article>
                 <article class="glass-card stat-card">
                     <span class="label">Gastos</span>
-                    <strong class="negative">-$1.480</strong>
+                    <strong class="negative" id="gastosTotal">$0,00</strong>
                 </article>
                 <article class="glass-card stat-card highlight">
                     <span class="label">Saldo</span>
-                    <strong>$12.345</strong>
+                    <strong id="saldoMovimientos">Cargando...</strong>
                 </article>
             </section>
 
@@ -53,74 +53,18 @@
                     <button class="ghost-btn" type="button">Ver todo</button>
                 </div>
 
-                <ul class="movement-list">
-                    <li class="movement-item">
+                <ul class="movement-list" id="movementList">
+                    <li class="movement-item empty-state">
                         <div class="movement-left">
-                            <span class="movement-icon income">S</span>
+                            <span class="movement-icon transfer">-</span>
                             <div>
-                                <strong>Salario</strong>
-                                <small>Transferencia recibida</small>
+                                <strong>Sin movimientos aún</strong>
+                                <small>Tu historial aparecerá aquí</small>
                             </div>
                         </div>
                         <div class="movement-right">
-                            <span class="amount positive">+$2.400</span>
+                            <span class="amount">$0,00</span>
                             <small>Hoy</small>
-                        </div>
-                    </li>
-
-                    <li class="movement-item">
-                        <div class="movement-left">
-                            <span class="movement-icon expense">M</span>
-                            <div>
-                                <strong>Mercado</strong>
-                                <small>Pago de supermercado</small>
-                            </div>
-                        </div>
-                        <div class="movement-right">
-                            <span class="amount negative">-$420</span>
-                            <small>Ayer</small>
-                        </div>
-                    </li>
-
-                    <li class="movement-item">
-                        <div class="movement-left">
-                            <span class="movement-icon transfer">T</span>
-                            <div>
-                                <strong>Transferencia</strong>
-                                <small>Enviado a Ana</small>
-                            </div>
-                        </div>
-                        <div class="movement-right">
-                            <span class="amount negative">-$180</span>
-                            <small>08 Sep</small>
-                        </div>
-                    </li>
-
-                    <li class="movement-item">
-                        <div class="movement-left">
-                            <span class="movement-icon income">C</span>
-                            <div>
-                                <strong>Carga de saldo</strong>
-                                <small>Recarga desde tarjeta</small>
-                            </div>
-                        </div>
-                        <div class="movement-right">
-                            <span class="amount positive">+$500</span>
-                            <small>06 Sep</small>
-                        </div>
-                    </li>
-
-                    <li class="movement-item">
-                        <div class="movement-left">
-                            <span class="movement-icon expense">U</span>
-                            <div>
-                                <strong>Uber</strong>
-                                <small>Servicio de transporte</small>
-                            </div>
-                        </div>
-                        <div class="movement-right">
-                            <span class="amount negative">-$90</span>
-                            <small>03 Sep</small>
                         </div>
                     </li>
                 </ul>
@@ -166,5 +110,6 @@
                 });
             });
         </script>
+    <script src="../js/movimientos.js"></script>
     </body>
 </html>
