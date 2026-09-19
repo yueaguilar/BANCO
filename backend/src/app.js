@@ -10,14 +10,23 @@ const generateAccountNumber = require('./services/accountGenerator');
 const {
     generateCardNumber,
     generateNip,
+    hashNip,
+    verifyNip,
     generateExpirationDate,
     generateCvv
 } = require('./services/cardGenerator');
 
 const app = express();
+const userNips = new Map();
 
 app.use(cors());
 app.use(express.json());
+
+async function generateSecureNip() {
+    const nip = generateNip();
+    const nipHash = await hashNip(nip);
+    return { nip, nipHash };
+}
 
 const publicPath = path.join(__dirname, '../../app/public');
 app.use(express.static(publicPath));
@@ -77,7 +86,7 @@ async function ensureTables() {
 async function createBankAccountForUser(userId) {
     const numeroCuenta = await generateAccountNumber();
     const numeroTarjeta = await generateCardNumber();
-    const nip = generateNip();
+    const { nip, nipHash } = await generateSecureNip();
     const expiracion = generateExpirationDate();
 
     const client = await pool.connect();
@@ -90,35 +99,30 @@ async function createBankAccountForUser(userId) {
         );
 
         const cuentaId = cuentaRes.rows[0].id;
-        const nipHash = await bcrypt.hash(nip, 10);
 
         const tarjetaRes = await client.query(
-            'INSERT INTO tarjetas (cuenta_id, numero_tarjeta, mes_expiracion, anio_expiracion, nip_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id, numero_tarjeta, mes_expiracion, anio_expiracion',
-            [cuentaId, numeroTarjeta, Number(expiracion.month), Number(expiracion.year), nipHash]
+            'INSERT INTO tarjetas (cuenta_id, numero_tarjeta, mes_expiracion, anio_expiracion, nip, nip_hash) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, numero_tarjeta, mes_expiracion, anio_expiracion',
+            [cuentaId, numeroTarjeta, Number(expiracion.month), Number(expiracion.year), nipHash, nipHash]
         );
 
-        console.log('Valores para insertar tarjeta (antes update nip):', { cuentaId, numeroTarjeta, mes: Number(expiracion.month), anio: Number(expiracion.year), nip, nipHash: nipHash.slice(0,6) + '...' });
+        userNips.set(Number(userId), String(nip));
 
-        // Some DB setups previously didn't persist `nip` reliably; set it explicitly after insert
         const tarjetaId = tarjetaRes.rows[0].id;
-        await client.query('UPDATE tarjetas SET nip = $1 WHERE id = $2', [nip, tarjetaId]);
-
         await client.query('COMMIT');
 
-        const tarjetaFinal = await client.query('SELECT id, numero_tarjeta, mes_expiracion, anio_expiracion, nip FROM tarjetas WHERE id = $1', [tarjetaId]);
+        const tarjetaFinal = await client.query('SELECT id, numero_tarjeta, mes_expiracion, anio_expiracion, nip_hash FROM tarjetas WHERE id = $1', [tarjetaId]);
         console.log('Resultado tarjeta final:', tarjetaFinal.rows[0]);
 
-        // Do not store CVV in the database. Generate current CVV dynamically for immediate display.
         const currentCvv = generateCvv(numeroTarjeta, Number(expiracion.month), Number(expiracion.year), 0);
 
         const tarjeta = tarjetaRes.rows[0];
 
-        console.log('Cuenta y tarjeta creadas:', { cuentaId, numeroCuenta, tarjetaId: tarjeta.id });
+        console.log('Cuenta y tarjeta creadas:', { cuentaId, numeroCuenta, tarjetaId: tarjeta.id, nipHash: nipHash.slice(0, 6) + '...' });
 
         return {
             numeroCuenta: String(cuentaRes.rows[0].numero_cuenta),
             numeroTarjeta: String(tarjeta.numero_tarjeta),
-            nip: String(tarjeta.nip),
+            nip: String(nip),
             mesExpiracion: Number(tarjeta.mes_expiracion),
             anioExpiracion: Number(tarjeta.anio_expiracion),
             cvv: currentCvv
@@ -148,7 +152,7 @@ const validPages = [
 
 async function getBankDataForUser(userId) {
     const cuentasRes = await pool.query(
-        `SELECT c.id as cuenta_id, c.numero_cuenta, c.saldo, t.id as tarjeta_id, t.numero_tarjeta, t.mes_expiracion, t.anio_expiracion, t.nip
+        `SELECT c.id as cuenta_id, c.numero_cuenta, c.saldo, t.id as tarjeta_id, t.numero_tarjeta, t.mes_expiracion, t.anio_expiracion, t.nip, t.nip_hash
          FROM cuentas c
          LEFT JOIN tarjetas t ON t.cuenta_id = c.id
          WHERE c.usuario_id = $1
@@ -160,6 +164,13 @@ async function getBankDataForUser(userId) {
     const cuentaInfo = cuentasRes.rows.length > 0 ? cuentasRes.rows[0] : null;
     if (!cuentaInfo) {
         return null;
+    }
+
+    const storedNip = cuentaInfo.nip ? String(cuentaInfo.nip) : null;
+    const visibleNip = userNips.get(Number(userId)) || (storedNip && /^\d{4}$/.test(storedNip) ? storedNip : null);
+
+    if (visibleNip) {
+        userNips.set(Number(userId), visibleNip);
     }
 
     const cvv = generateCvv(
@@ -176,7 +187,7 @@ async function getBankDataForUser(userId) {
         numeroTarjeta: cuentaInfo.numero_tarjeta,
         mesExpiracion: Number(cuentaInfo.mes_expiracion),
         anioExpiracion: Number(cuentaInfo.anio_expiracion),
-        nip: cuentaInfo.nip || null,
+        nip: visibleNip,
         cvv
     };
 }
@@ -334,7 +345,7 @@ app.post('/api/deposit', async (req, res) => {
         }
 
         const cuenta = rows[0];
-        const isNipValid = await bcrypt.compare(String(nip), cuenta.nip_hash);
+        const isNipValid = await verifyNip(String(nip), cuenta.nip_hash);
         const isCardValid = String(cuenta.numero_tarjeta) === String(cardNumber);
         const isExpirationValid = Number(cuenta.mes_expiracion) === Number(expirationMonth)
             && Number(cuenta.anio_expiracion) === Number(expirationYear);

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const generateAccountNumber = require('../src/services/accountGenerator');
-const { generateNip, generateCardNumber, generateCvv } = require('../src/services/cardGenerator');
+const { generateNip, generateCardNumber, generateCvv, hashNip, verifyNip } = require('../src/services/cardGenerator');
 
 test('generateAccountNumber crea un número de cuenta válido', async () => {
   const value = await generateAccountNumber();
@@ -12,6 +12,15 @@ test('generateAccountNumber crea un número de cuenta válido', async () => {
 test('generateNip crea un NIP válido de 4 dígitos', () => {
   const value = generateNip();
   assert.match(value, /^\d{4}$/);
+});
+
+test('hashNip y verifyNip validan el NIP generado con el mismo método de encriptación', async () => {
+  const nip = generateNip();
+  const hash = await hashNip(nip);
+
+  assert.notEqual(hash, nip);
+  assert.equal(await verifyNip(nip, hash), true);
+  assert.equal(await verifyNip('0000', hash), false);
 });
 
 test('generateCardNumber crea una tarjeta Visa válida', async () => {

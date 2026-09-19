@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 const pool = require('../database');
 
 const generatedCardNumbers = new Set();
@@ -25,6 +26,14 @@ function calculateLuhnCheckDigit(partialDigits) {
 
 function generateNip() {
     return String(crypto.randomInt(1000, 10000)).padStart(4, '0');
+}
+
+async function hashNip(nip) {
+    return bcrypt.hash(String(nip), 10);
+}
+
+async function verifyNip(nip, hash) {
+    return bcrypt.compare(String(nip), String(hash));
 }
 
 function generateExpirationDate() {
@@ -90,6 +99,8 @@ function generateCvv(cardNumber, expirationMonth = '12', expirationYear = '30', 
 
 module.exports = {
     generateNip,
+    hashNip,
+    verifyNip,
     generateExpirationDate,
     generateCardNumber,
     generateCvv,
@@ -97,6 +108,8 @@ module.exports = {
 };
 
 module.exports.generateNip = generateNip;
+module.exports.hashNip = hashNip;
+module.exports.verifyNip = verifyNip;
 module.exports.generateExpirationDate = generateExpirationDate;
 module.exports.generateCardNumber = generateCardNumber;
 module.exports.generateCvv = generateCvv;
