@@ -65,7 +65,6 @@ async function ensureTables() {
                 numero_tarjeta VARCHAR(19) UNIQUE NOT NULL,
                 mes_expiracion INTEGER NOT NULL,
                 anio_expiracion INTEGER NOT NULL,
-                nip TEXT,
                 nip_hash TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT fk_cuenta
@@ -75,7 +74,13 @@ async function ensureTables() {
             )
         `);
 
-        await pool.query('ALTER TABLE tarjetas ADD COLUMN IF NOT EXISTS nip TEXT');
+        // El NIP nunca se guarda en claro: se elimina la columna si existía de una versión previa.
+        await pool.query('ALTER TABLE tarjetas DROP COLUMN IF EXISTS nip');
+
+        // Saldo siempre con valor numérico válido, nunca NULL.
+        await pool.query('UPDATE cuentas SET saldo = 0 WHERE saldo IS NULL');
+        await pool.query('ALTER TABLE cuentas ALTER COLUMN saldo SET DEFAULT 0.00');
+        await pool.query('ALTER TABLE cuentas ALTER COLUMN saldo SET NOT NULL');
 
         console.log('Tablas verificadas');
     } catch (err) {
@@ -101,23 +106,19 @@ async function createBankAccountForUser(userId) {
         const cuentaId = cuentaRes.rows[0].id;
 
         const tarjetaRes = await client.query(
-            'INSERT INTO tarjetas (cuenta_id, numero_tarjeta, mes_expiracion, anio_expiracion, nip, nip_hash) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, numero_tarjeta, mes_expiracion, anio_expiracion',
-            [cuentaId, numeroTarjeta, Number(expiracion.month), Number(expiracion.year), nipHash, nipHash]
+            'INSERT INTO tarjetas (cuenta_id, numero_tarjeta, mes_expiracion, anio_expiracion, nip_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id, numero_tarjeta, mes_expiracion, anio_expiracion',
+            [cuentaId, numeroTarjeta, Number(expiracion.month), Number(expiracion.year), nipHash]
         );
 
-        userNips.set(Number(userId), String(nip));
-
-        const tarjetaId = tarjetaRes.rows[0].id;
         await client.query('COMMIT');
 
-        const tarjetaFinal = await client.query('SELECT id, numero_tarjeta, mes_expiracion, anio_expiracion, nip_hash FROM tarjetas WHERE id = $1', [tarjetaId]);
-        console.log('Resultado tarjeta final:', tarjetaFinal.rows[0]);
+        userNips.set(Number(userId), String(nip));
 
         const currentCvv = generateCvv(numeroTarjeta, Number(expiracion.month), Number(expiracion.year), 0);
 
         const tarjeta = tarjetaRes.rows[0];
 
-        console.log('Cuenta y tarjeta creadas:', { cuentaId, numeroCuenta, tarjetaId: tarjeta.id, nipHash: nipHash.slice(0, 6) + '...' });
+        console.log('Cuenta y tarjeta creadas:', { cuentaId, numeroCuenta, tarjetaId: tarjeta.id });
 
         return {
             numeroCuenta: String(cuentaRes.rows[0].numero_cuenta),
@@ -152,7 +153,7 @@ const validPages = [
 
 async function getBankDataForUser(userId) {
     const cuentasRes = await pool.query(
-        `SELECT c.id as cuenta_id, c.numero_cuenta, c.saldo, t.id as tarjeta_id, t.numero_tarjeta, t.mes_expiracion, t.anio_expiracion, t.nip, t.nip_hash
+        `SELECT c.id as cuenta_id, c.numero_cuenta, c.saldo, t.id as tarjeta_id, t.numero_tarjeta, t.mes_expiracion, t.anio_expiracion
          FROM cuentas c
          LEFT JOIN tarjetas t ON t.cuenta_id = c.id
          WHERE c.usuario_id = $1
@@ -166,12 +167,9 @@ async function getBankDataForUser(userId) {
         return null;
     }
 
-    const storedNip = cuentaInfo.nip ? String(cuentaInfo.nip) : null;
-    const visibleNip = userNips.get(Number(userId)) || (storedNip && /^\d{4}$/.test(storedNip) ? storedNip : null);
-
-    if (visibleNip) {
-        userNips.set(Number(userId), visibleNip);
-    }
+    // El NIP solo existe en claro en memoria, justo después de haberse generado.
+    // Una vez hasheado no es recuperable, igual que la contraseña: por diseño.
+    const visibleNip = userNips.get(Number(userId)) || null;
 
     const cvv = generateCvv(
         String(cuentaInfo.numero_tarjeta),
@@ -298,7 +296,6 @@ app.post('/api/auth', async (req, res) => {
 
         const bankData = await createBankAccountForUser(userInsert.rows[0].id);
         console.log('Usuario registrado:', { userId: userInsert.rows[0].id, email });
-        console.log('bankData devuelto:', bankData);
 
         return res.json({
             success: true,
@@ -359,17 +356,46 @@ app.post('/api/deposit', async (req, res) => {
             return res.status(401).json({ success: false, message: 'Datos de la tarjeta inválidos para el depósito' });
         }
 
-        const nuevoSaldo = Number(cuenta.saldo) + Number(amount);
-        await pool.query('UPDATE cuentas SET saldo = $1 WHERE id = $2', [nuevoSaldo, cuenta.id]);
+        const monto = Number(amount);
+        if (!Number.isFinite(monto) || monto <= 0) {
+            return res.status(400).json({ success: false, message: 'El monto debe ser mayor a cero' });
+        }
+
+        const actualizado = await pool.query(
+            'UPDATE cuentas SET saldo = saldo + $1 WHERE id = $2 RETURNING saldo',
+            [monto, cuenta.id]
+        );
 
         return res.json({
             success: true,
             message: 'Depósito realizado con éxito',
-            saldo: nuevoSaldo
+            saldo: Number(actualizado.rows[0].saldo)
         });
     } catch (err) {
         console.error('Deposit error:', err);
         return res.status(500).json({ success: false, message: 'Error procesando el depósito' });
+    }
+});
+
+app.get('/api/balance/:numeroCuenta', async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            'SELECT numero_cuenta, saldo FROM cuentas WHERE numero_cuenta = $1',
+            [req.params.numeroCuenta]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Cuenta no encontrada' });
+        }
+
+        return res.json({
+            success: true,
+            numeroCuenta: rows[0].numero_cuenta,
+            saldo: Number(rows[0].saldo)
+        });
+    } catch (err) {
+        console.error('Balance error:', err);
+        return res.status(500).json({ success: false, message: 'Error consultando el saldo' });
     }
 });
 

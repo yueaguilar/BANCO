@@ -1,104 +1,173 @@
 document.addEventListener('DOMContentLoaded', () => {
+  const formatCurrency = (value) => new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 2,
+  }).format(Number(value || 0));
+
+  const readSession = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user')) || null;
+      const bankData = JSON.parse(localStorage.getItem('bankData')) || null;
+      return { user, bankData };
+    } catch (error) {
+      return { user: null, bankData: null };
+    }
+  };
+
+  const setError = (message) => {
+    const errorBox = document.getElementById('errorBox');
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.classList.remove('hidden');
+  };
+
+  const clearError = () => {
+    const errorBox = document.getElementById('errorBox');
+    if (errorBox) {
+      errorBox.textContent = '';
+      errorBox.classList.add('hidden');
+    }
+  };
+
   const phoneInput = document.getElementById('phoneInput');
-  const phonePreview = document.getElementById('phonePreview');
   const amountInput = document.getElementById('amountInput');
   const summaryAmount = document.getElementById('summaryAmount');
   const summaryFee = document.getElementById('summaryFee');
   const summaryTotal = document.getElementById('summaryTotal');
-  const successMessage = document.getElementById('successMessage');
+  const balanceBadge = document.getElementById('balanceBadge');
   const confirmBtn = document.getElementById('confirmBtn');
   const cancelBtn = document.getElementById('cancelBtn');
-  const backHomeBtn = document.getElementById('backHomeBtn');
+  const backBtn = document.getElementById('backBtn');
   const successModal = document.getElementById('successModal');
-  const quickRechargeBtn = document.getElementById('quickRechargeBtn');
-  const changeCarrierBtn = document.getElementById('changeCarrierBtn');
+  const successMessage = document.getElementById('successMessage');
+  const quickFillBtn = document.getElementById('quickFillBtn');
 
-  const carriers = ['Personal', 'Claro', 'Movistar'];
+  const session = readSession();
+  const currentBalance = Number(session.bankData?.saldo || 0);
 
-  const formatCurrency = (value) => {
-    const amount = Number(value || 0);
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-      minimumFractionDigits: 2,
-    }).format(amount);
-  };
-
-  const updatePhonePreview = () => {
-    const digits = phoneInput.value.replace(/\D/g, '').slice(0, 10);
-    phoneInput.value = digits;
-    const formatted = digits.length >= 10
-      ? `+54 11 ${digits.slice(2, 6)}-${digits.slice(6, 10)}`
-      : digits.length >= 7
-        ? `+54 11 ${digits.slice(2, 7)}`
-        : digits.length > 0
-          ? `+54 11 ${digits}`
-          : '+54 11';
-    phonePreview.textContent = formatted;
-  };
+  if (balanceBadge) {
+    balanceBadge.textContent = `Saldo: ${formatCurrency(currentBalance)}`;
+  }
 
   const updateSummary = () => {
-    const rawAmount = Number(amountInput.value || 0);
-    const commission = rawAmount > 1000 ? 15 : 0;
-    const total = rawAmount + commission;
+    const amount = Number(amountInput?.value || 0);
+    const fee = amount > 0 ? Math.max(10, amount * 0.015) : 0;
+    const total = amount + fee;
 
-    summaryAmount.textContent = formatCurrency(rawAmount);
-    summaryFee.textContent = formatCurrency(commission);
-    summaryTotal.textContent = formatCurrency(total);
+    if (summaryAmount) summaryAmount.textContent = formatCurrency(amount);
+    if (summaryFee) summaryFee.textContent = formatCurrency(fee);
+    if (summaryTotal) summaryTotal.textContent = formatCurrency(total);
+
+    if (balanceBadge) {
+      const remaining = currentBalance - total;
+      balanceBadge.textContent = `Saldo: ${formatCurrency(currentBalance)} · disponible ${formatCurrency(Math.max(remaining, 0))}`;
+    }
   };
 
-  phoneInput.addEventListener('input', updatePhonePreview);
-  amountInput.addEventListener('input', updateSummary);
+  const validateRecharge = () => {
+    const phoneDigits = phoneInput.value.replace(/\D/g, '');
+    const amount = Number(amountInput.value || 0);
+    const carrier = document.querySelector('.carrier.selected')?.dataset.carrier || 'Personal';
+
+    if (phoneDigits.length < 10) {
+      setError('Ingresá un número de celular válido para continuar.');
+      phoneInput.focus();
+      return null;
+    }
+
+    if (!amount || amount <= 0) {
+      setError('El monto de la recarga debe ser mayor a cero.');
+      amountInput.focus();
+      return null;
+    }
+
+    if (amount > currentBalance) {
+      setError('No tenés saldo suficiente para completar esta recarga.');
+      amountInput.focus();
+      return null;
+    }
+
+    if (!carrier) {
+      setError('Seleccioná un operador para continuar.');
+      return null;
+    }
+
+    clearError();
+    return { phoneDigits, amount, carrier, total: amount + Math.max(10, amount * 0.015) };
+  };
+
+  phoneInput?.addEventListener('input', () => {
+    const digits = phoneInput.value.replace(/\D/g, '').slice(0, 10);
+    phoneInput.value = digits;
+    clearError();
+  });
+
+  amountInput?.addEventListener('input', () => {
+    const value = Number(amountInput.value || 0);
+    if (value < 0) amountInput.value = 0;
+    updateSummary();
+    clearError();
+  });
 
   document.querySelectorAll('.carrier').forEach((button) => {
     button.addEventListener('click', () => {
-      document.querySelectorAll('.carrier').forEach((el) => el.classList.remove('active'));
-      button.classList.add('active');
+      document.querySelectorAll('.carrier').forEach((item) => item.classList.remove('selected'));
+      button.classList.add('selected');
+      clearError();
     });
   });
 
-  quickRechargeBtn.addEventListener('click', () => {
+  document.querySelectorAll('.amount-pill').forEach((button) => {
+    button.addEventListener('click', () => {
+      amountInput.value = button.dataset.amount || '0';
+      updateSummary();
+    });
+  });
+
+  quickFillBtn?.addEventListener('click', () => {
     phoneInput.value = '1123456789';
-    document.querySelector('.carrier.active')?.classList.remove('active');
-    const personalCarrier = [...document.querySelectorAll('.carrier')].find((button) => button.dataset.carrier === 'Personal');
-    personalCarrier?.classList.add('active');
     amountInput.value = '1500';
-    updatePhonePreview();
+    document.querySelectorAll('.carrier').forEach((button) => {
+      button.classList.toggle('selected', button.dataset.carrier === 'Personal');
+    });
     updateSummary();
+    clearError();
   });
 
-  changeCarrierBtn.addEventListener('click', () => {
-    const activeCarrier = document.querySelector('.carrier.active');
-    const currentIndex = carriers.indexOf(activeCarrier?.dataset.carrier || 'Personal');
-    const nextIndex = (currentIndex + 1) % carriers.length;
-
-    document.querySelectorAll('.carrier').forEach((button) => button.classList.remove('active'));
-    const nextCarrier = document.querySelector(`.carrier[data-carrier="${carriers[nextIndex]}"]`);
-    nextCarrier?.classList.add('active');
+  cancelBtn?.addEventListener('click', () => {
+    window.location.href = 'cuenta.html';
   });
 
-  cancelBtn.addEventListener('click', () => {
-    window.location.href = 'app.html';
-  });
+  confirmBtn?.addEventListener('click', () => {
+    const validated = validateRecharge();
+    if (!validated) return;
 
-  confirmBtn.addEventListener('click', () => {
-    const rawAmount = Number(amountInput.value || 0);
-    const phoneDigits = phoneInput.value.replace(/\D/g, '');
-    const selectedCarrier = document.querySelector('.carrier.active')?.dataset.carrier || 'Personal';
+    const nextBalance = currentBalance - validated.total;
+    const updatedBankData = { ...session.bankData, saldo: Number(nextBalance.toFixed(2)) };
 
-    if (!rawAmount || rawAmount <= 0 || phoneDigits.length < 10) {
-      phoneInput.focus();
-      return;
+    try {
+      localStorage.setItem('bankData', JSON.stringify(updatedBankData));
+
+      const movement = {
+        title: `Recarga ${validated.carrier}`,
+        amount: `-${formatCurrency(validated.total)}`,
+        date: new Date().toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      };
+
+      const existingMovements = JSON.parse(localStorage.getItem('transactions') || '[]');
+      localStorage.setItem('transactions', JSON.stringify([movement, ...existingMovements].slice(0, 12)));
+    } catch (error) {
+      console.warn('No se pudo guardar la recarga en localStorage', error);
     }
 
-    successMessage.textContent = `Tu recarga de ${formatCurrency(rawAmount)} para ${selectedCarrier} fue realizada.`;
+    successMessage.textContent = `Tu recarga de ${formatCurrency(validated.amount)} para ${validated.carrier} fue realizada correctamente. Total abonado ${formatCurrency(validated.total)}.`;
     successModal.classList.remove('hidden');
   });
 
-  backHomeBtn.addEventListener('click', () => {
-    window.location.href = 'app.html?recharge=success';
+  backBtn?.addEventListener('click', () => {
+    window.location.href = 'cuenta.html';
   });
 
-  updatePhonePreview();
   updateSummary();
 });
