@@ -15,6 +15,15 @@ const {
     generateExpirationDate,
     generateCvv
 } = require('./services/cardGenerator');
+const {
+    generateVerificationCode,
+    normalizePhone,
+    storeVerificationCode,
+    consumeVerificationCode,
+    markPhoneVerified,
+    isPhoneVerified
+} = require('./services/verificationService');
+const { enviarSMS } = require('./services/smsService');
 
 const app = express();
 const userNips = new Map();
@@ -139,6 +148,7 @@ async function createBankAccountForUser(userId) {
 
 const validPages = [
     'login',
+    'veri',
     'app',
     'cuenta',
     'movimientos',
@@ -267,10 +277,72 @@ app.get('/api/session', async (req, res) => {
     }
 });
 
+app.post('/api/verification/send', async (req, res) => {
+    const { phone, email } = req.body;
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!normalizedPhone || normalizedPhone.length < 10) {
+        return res.status(400).json({ success: false, message: 'Debes ingresar un número de teléfono válido para recibir el código.' });
+    }
+
+    try {
+        const code = generateVerificationCode();
+        storeVerificationCode(normalizedPhone, code, 5 * 60 * 1000);
+
+        await enviarSMS(normalizedPhone, code);
+
+        console.log(`Código de verificación enviado a ${normalizedPhone} para ${email || 'usuario sin email'}`);
+
+        return res.json({
+            success: true,
+            message: 'Código de verificación enviado al número ingresado.'
+        });
+    } catch (error) {
+        console.error('Error enviando el código de verificación:', error);
+        return res.status(500).json({ success: false, message: 'No se pudo enviar el código de verificación.' });
+    }
+});
+
+app.post('/api/verification/verify', async (req, res) => {
+    const { phone, code } = req.body;
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!normalizedPhone || !code) {
+        return res.status(400).json({ success: false, message: 'Número y código requeridos' });
+    }
+
+    const valid = consumeVerificationCode(normalizedPhone, code);
+
+    if (!valid) {
+        return res.status(401).json({ success: false, message: 'El código de verificación es inválido o expiró.' });
+    }
+
+    markPhoneVerified(normalizedPhone, 10 * 60 * 1000);
+
+    return res.json({ success: true, message: 'Código verificado correctamente.' });
+});
+
 app.post('/api/auth', async (req, res) => {
-    const { email, fullname, birthdate, password } = req.body;
+    const { email, fullname, birthdate, password, phone, verificationCode } = req.body;
+    const normalizedPhone = normalizePhone(phone);
+
     if (!email || !password) {
         return res.status(400).json({ success: false, message: 'email y password requeridos' });
+    }
+
+    if (!normalizedPhone || normalizedPhone.length < 10) {
+        return res.status(400).json({ success: false, message: 'Debes ingresar tu número de teléfono para continuar.' });
+    }
+
+    const phoneWasVerified = isPhoneVerified(normalizedPhone);
+    const verifiedByCode = verificationCode ? (consumeVerificationCode(normalizedPhone, verificationCode) || phoneWasVerified) : phoneWasVerified;
+
+    if (!verifiedByCode) {
+        return res.status(401).json({ success: false, message: 'Debes verificar el código enviado al número.' });
+    }
+
+    if (verificationCode && !phoneWasVerified) {
+        markPhoneVerified(normalizedPhone, 10 * 60 * 1000);
     }
 
     try {
@@ -295,7 +367,7 @@ app.post('/api/auth', async (req, res) => {
         );
 
         const bankData = await createBankAccountForUser(userInsert.rows[0].id);
-        console.log('Usuario registrado:', { userId: userInsert.rows[0].id, email });
+        console.log('Usuario registrado:', { userId: userInsert.rows[0].id, email, phone: normalizedPhone });
 
         return res.json({
             success: true,
@@ -405,4 +477,4 @@ ensureTables().then(() => {
     app.listen(PORT, () => {
         console.log(`Servidor ejecutándose en http://localhost:${PORT}`);
     });
-});
+});                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     

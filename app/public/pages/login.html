@@ -17,13 +17,14 @@
                 <input id="fullname" class="liquid-glass-input" type="text" name="fullname" placeholder="Nombre completo">
                 <label class="small">Fecha de nacimiento</label>
                 <input id="birthdate" class="liquid-glass-input" type="date" name="birthdate">
+                <input id="phone" class="liquid-glass-input" type="tel" inputmode="numeric" maxlength="10" name="phone" placeholder="Número de celular (10 dígitos)" required>
                 <div style="display:flex;align-items:center;gap:8px;">
                     <input id="password" class="liquid-glass-input" type="password" name="password" placeholder="Contraseña" required>
                     <label style="font-size:0.9rem;display:flex;align-items:center;gap:6px;">
                         <input id="toggle-password" type="checkbox"> Mostrar
                     </label>
                 </div>
-                <button type="submit" class="correo liquid-glass-btn">Crear cuenta / Iniciar sesión</button>
+                <button type="submit" class="correo liquid-glass-btn">Enviar código y continuar</button>
             </form>
         </div>
         <script src="../js/login.js"></script>
