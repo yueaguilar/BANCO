@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>LCDK | Transferir</title>
+        <link rel="icon" type="image/png" href="../aseets/logo2.png">
+        <link rel="stylesheet" href="../css/app.css">
+        <link rel="stylesheet" href="../css/transefir.css">
+    </head>
+    <body>
+        <header class="topbar">
+            <div class="topbar-inner">
+                <a href="app.html" class="icon-btn back-btn" aria-label="Volver al inicio">← Volver</a>
+                <h1 class="brand">LCDKK</h1>
+                <a href="cuenta.html" class="icon-btn">Perfil</a>
+            </div>
+        </header>
+
+        <main class="transfer-shell">
+            <section class="transfer-header">
+                <div>
+                    <p class="eyebrow">Transferencia</p>
+                    <h2>Nueva transferencia</h2>
+                </div>
+                <div class="header-actions">
+                    <button class="tag-btn" id="quickTransferBtn" type="button">Transferencia rápida</button>
+                    <button class="tag-btn" id="qrShareBtn" type="button">Generar QR</button>
+                    <button class="tag-btn" id="scanQrBtn" type="button">Escanear QR</button>
+                </div>
+            </section>
+
+            <section class="transfer-card">
+                <div class="destination-row">
+                    <div class="destination-meta">
+                        <span class="label">Destinatario</span>
+                        <strong id="destinatarioLabel">Destinatario</strong>
+                    </div>
+                    <button class="chip-btn" id="changeContactBtn" type="button">Cambiar</button>
+                </div>
+
+                <label class="field-label" for="amountInput">Monto</label>
+                <div class="amount-box">
+                    <span class="currency">$</span>
+                    <input id="amountInput" type="number" min="1" step="0.01" value="" placeholder="0,00">
+                </div>
+
+                <label class="field-label" for="recipientInput">Alias / CVU</label>
+                <input id="recipientInput" class="text-input" type="text" value="" maxlength="40" placeholder="Ingresá el alias">
+
+                <label class="field-label" for="accountNumberInput">Número de cuenta</label>
+                <input id="accountNumberInput" class="text-input" type="text" inputmode="numeric" pattern="[0-9]*" value="" maxlength="20" placeholder="Ingresá el número de cuenta">
+
+                <label class="field-label" for="conceptInput">Concepto</label>
+                <input id="conceptInput" class="text-input" type="text" value="" maxlength="40" placeholder="Ingresá un concepto">
+
+                <div class="summary-box">
+                    <div class="summary-line">
+                        <span>Monto</span>
+                        <strong id="summaryAmount">$ 0,00</strong>
+                    </div>
+                    <div class="summary-line">
+                        <span>Comisión</span>
+                        <strong id="summaryFee">$ 0,00</strong>
+                    </div>
+                    <div class="summary-line total">
+                        <span>Total</span>
+                        <strong id="summaryTotal">$ 0,00</strong>
+                    </div>
+                </div>
+            </section>
+
+            <div class="transfer-actions">
+                <button id="cancelBtn" type="button" class="secondary-btn">Cancelar</button>
+                <button id="confirmBtn" type="button" class="primary-btn">Confirmar transferencia</button>
+            </div>
+        </main>
+
+        <div id="successModal" class="success-modal hidden" role="dialog" aria-modal="true">
+            <div class="success-card">
+                <div class="success-icon">✓</div>
+                <h3>¡Transferencia realizada!</h3>
+                <p id="successMessage">Tu transferencia será confirmada.</p>
+                <button id="backHomeBtn" type="button" class="primary-btn full">Volver al inicio</button>
+            </div>
+        </div>
+
+        <script src="../js/transferir.js"></script>
+    </body>
+</html>
