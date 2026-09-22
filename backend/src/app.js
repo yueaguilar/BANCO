@@ -301,7 +301,7 @@ app.post('/api/verification/send', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Debes ingresar un correo electrónico válido.' });
     }
 
-    if (!normalizedPhone || normalizedPhone.length < 10) {
+    if (normalizedPhone && normalizedPhone.length < 10) {
         return res.status(400).json({ success: false, message: 'Debes ingresar un número de teléfono válido para guardar el dato del usuario.' });
     }
 
@@ -324,21 +324,20 @@ app.post('/api/verification/verify', async (req, res) => {
     const { phone, email, code } = req.body;
     const normalizedPhone = normalizePhone(phone);
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    const verificationTarget = normalizedEmail || normalizedPhone;
 
-    if (!verificationTarget || !code) {
-        return res.status(400).json({ success: false, message: 'Correo o teléfono y código requeridos' });
+    if (!normalizedEmail || !code) {
+        return res.status(400).json({ success: false, message: 'Correo y código requeridos' });
     }
 
-    const valid = consumeVerificationCode(verificationTarget, code);
+    const valid = consumeVerificationCode(normalizedEmail, code);
 
     if (!valid) {
         return res.status(401).json({ success: false, message: 'El código de verificación es inválido o expiró.' });
     }
 
-    if (normalizedEmail) {
-        markEmailVerified(normalizedEmail, 10 * 60 * 1000);
-    } else {
+    markEmailVerified(normalizedEmail, 10 * 60 * 1000);
+
+    if (normalizedPhone) {
         markPhoneVerified(normalizedPhone, 10 * 60 * 1000);
     }
 

@@ -61,7 +61,6 @@ async function enviarCorreoVerificacion(email, codigo) {
     }
 
     return {
-        simulated: false,
         email: normalizedEmail,
         message: 'Correo de verificación enviado correctamente.'
     };

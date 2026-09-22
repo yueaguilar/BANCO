@@ -7,7 +7,7 @@ process.env.BREVO_SENDER_NAME = 'Banco Ficticio';
 
 const { enviarCorreoVerificacion } = require('../src/services/emailService');
 
-test('enviarCorreoVerificacion debe usar Brevo y no devolver el código al cliente', async () => {
+test('enviarCorreoVerificacion debe usar Brevo y no devolver el código ni indicios de simulación al cliente', async () => {
   let capturedBody;
   global.fetch = async (_url, options) => {
     capturedBody = JSON.parse(options.body);
@@ -19,11 +19,12 @@ test('enviarCorreoVerificacion debe usar Brevo y no devolver el código al clien
 
   const result = await enviarCorreoVerificacion('demo@example.com', '123456');
 
-  assert.equal(result.simulated, false);
+  assert.equal(result.simulated, undefined);
   assert.equal(result.email, 'demo@example.com');
   assert.equal(capturedBody.sender.email, 'noreply@bancoficticio.com');
   assert.equal(capturedBody.sender.name, 'Banco Ficticio');
   assert.equal(result.codigo, undefined);
+  assert.equal(result.code, undefined);
   assert.ok(typeof result.message === 'string');
 });
 
