@@ -1,39 +1,62 @@
-const { randomInt } = require('node:crypto');
-
 const verificationCodes = new Map();
-const verifiedPhoneNumbers = new Map();
-
-function normalizePhone(value) {
-    return String(value || '').replace(/\D/g, '');
-}
+const verifiedEmails = new Map();
+const verifiedPhones = new Map();
 
 function generateVerificationCode() {
-    return String(randomInt(100000, 1000000)).padStart(6, '0');
+    return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function storeVerificationCode(phone, code, ttlMs = 5 * 60 * 1000) {
-    const key = normalizePhone(phone);
-    const expiresAt = Date.now() + ttlMs;
-
-    verificationCodes.set(key, { code: String(code), expiresAt });
-    return { key, code: String(code), expiresAt };
+function normalizePhone(phone) {
+    const digits = String(phone || '').replace(/\D/g, '');
+    return digits.length >= 10 ? digits.slice(-10) : '';
 }
 
-function consumeVerificationCode(phone, code) {
-    const key = normalizePhone(phone);
+function normalizeIdentifier(identifier) {
+    if (typeof identifier === 'string') {
+        const trimmed = identifier.trim();
+        return trimmed ? trimmed.toLowerCase() : '';
+    }
+
+    return String(identifier || '').trim().toLowerCase();
+}
+
+function getExpirationTimestamp(ttlMs) {
+    return Date.now() + ttlMs;
+}
+
+function storeVerificationCode(identifier, code, ttlMs) {
+    const key = normalizeIdentifier(identifier);
+    if (!key || !code) {
+        return false;
+    }
+
+    verificationCodes.set(key, {
+        code: String(code).trim(),
+        expiresAt: getExpirationTimestamp(ttlMs)
+    });
+
+    return true;
+}
+
+function consumeVerificationCode(identifier, code) {
+    const key = normalizeIdentifier(identifier);
+    const providedCode = String(code || '').trim();
+
+    if (!key || !providedCode) {
+        return false;
+    }
+
     const record = verificationCodes.get(key);
-
     if (!record) {
         return false;
     }
 
-    const now = Date.now();
-    if (now >= record.expiresAt) {
+    if (Date.now() > record.expiresAt) {
         verificationCodes.delete(key);
         return false;
     }
 
-    if (String(record.code) !== String(code)) {
+    if (record.code !== providedCode) {
         return false;
     }
 
@@ -41,22 +64,50 @@ function consumeVerificationCode(phone, code) {
     return true;
 }
 
-function markPhoneVerified(phone, ttlMs = 10 * 60 * 1000) {
+function markEmailVerified(email, ttlMs) {
+    const key = normalizeIdentifier(email);
+    if (!key) {
+        return false;
+    }
+
+    verifiedEmails.set(key, getExpirationTimestamp(ttlMs));
+    return true;
+}
+
+function isEmailVerified(email) {
+    const key = normalizeIdentifier(email);
+    if (!key) {
+        return false;
+    }
+
+    const expiresAt = verifiedEmails.get(key);
+    if (!expiresAt || Date.now() > expiresAt) {
+        verifiedEmails.delete(key);
+        return false;
+    }
+
+    return true;
+}
+
+function markPhoneVerified(phone, ttlMs) {
     const key = normalizePhone(phone);
-    verifiedPhoneNumbers.set(key, Date.now() + ttlMs);
+    if (!key) {
+        return false;
+    }
+
+    verifiedPhones.set(key, getExpirationTimestamp(ttlMs));
     return true;
 }
 
 function isPhoneVerified(phone) {
     const key = normalizePhone(phone);
-    const expiresAt = verifiedPhoneNumbers.get(key);
-
-    if (!expiresAt) {
+    if (!key) {
         return false;
     }
 
-    if (Date.now() > expiresAt) {
-        verifiedPhoneNumbers.delete(key);
+    const expiresAt = verifiedPhones.get(key);
+    if (!expiresAt || Date.now() > expiresAt) {
+        verifiedPhones.delete(key);
         return false;
     }
 
@@ -70,6 +121,6 @@ module.exports = {
     consumeVerificationCode,
     markPhoneVerified,
     isPhoneVerified,
-    verificationCodes,
-    verifiedPhoneNumbers
+    markEmailVerified,
+    isEmailVerified
 };

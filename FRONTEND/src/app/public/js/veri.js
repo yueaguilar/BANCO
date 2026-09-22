@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const verificationPhoneEl = document.getElementById('verification-phone');
+    const verificationEmailEl = document.getElementById('verification-email');
     const verificationCodeInput = document.getElementById('verification-code');
     const verificationForm = document.getElementById('verification-form');
     const resendBtn = document.getElementById('resend-code');
@@ -7,9 +7,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const pendingAuth = JSON.parse(localStorage.getItem('pendingAuth') || 'null');
     const phone = localStorage.getItem('verificationPhone') || pendingAuth?.phone || '';
+    const email = localStorage.getItem('verificationEmail') || pendingAuth?.email || '';
 
-    if (verificationPhoneEl) {
-        verificationPhoneEl.textContent = phone ? `+52 ${phone}` : 'número no disponible';
+    if (verificationEmailEl) {
+        verificationEmailEl.textContent = email || 'correo no disponible';
     }
 
     const setStatus = (message, isError = false) => {
@@ -19,8 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const sendCode = async () => {
-        if (!phone) {
-            setStatus('No hay un número disponible para verificar.', true);
+        if (!email) {
+            setStatus('No hay un correo electrónico disponible para verificar.', true);
             return;
         }
 
@@ -28,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/verification/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone, email: pendingAuth?.email || localStorage.getItem('verificationEmail') || '' })
+                body: JSON.stringify({ phone, email })
             });
 
             const data = await response.json();
@@ -36,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(data.message || 'No se pudo reenviar el código.');
             }
 
-            setStatus('Se reenvió el código correctamente.');
+            setStatus('Se reenvió el código correctamente. Revisa tu correo para ingresarlo manualmente.');
         } catch (error) {
             console.error(error);
             setStatus(error.message || 'Hubo un problema al reenviar el código.', true);
@@ -58,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
             event.preventDefault();
             const code = verificationCodeInput?.value.trim() || '';
 
-            if (!phone || !code || code.length !== 6) {
+            if (!email || !code || code.length !== 6) {
                 setStatus('Ingresa un código de 6 dígitos válido.', true);
                 return;
             }
@@ -67,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const response = await fetch('/api/verification/verify', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone, code })
+                    body: JSON.stringify({ email, phone, code })
                 });
 
                 const data = await response.json();
@@ -86,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({
                         ...pending,
                         phone,
-                        verificationCode: code
+                        email
                     })
                 });
 
@@ -110,9 +111,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    if (phone) {
+    if (email) {
         sendCode();
     } else {
-        setStatus('No se encontró el teléfono para esta sesión.', true);
+        setStatus('No se encontró un correo para esta sesión.', true);
     }
 });

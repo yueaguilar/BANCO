@@ -21,9 +21,11 @@ const {
     storeVerificationCode,
     consumeVerificationCode,
     markPhoneVerified,
-    isPhoneVerified
+    isPhoneVerified,
+    markEmailVerified,
+    isEmailVerified
 } = require('./services/verificationService');
-const { enviarSMS } = require('./services/smsService');
+const { enviarCorreoVerificacion } = require('./services/emailService');
 
 const app = express();
 const userNips = new Map();
@@ -31,15 +33,21 @@ const userNips = new Map();
 app.use(cors());
 app.use(express.json());
 
+const possiblePublicPaths = [
+    path.join(__dirname, '../../FRONTEND/src/app/public'),
+    path.join(__dirname, '../../app/public')
+];
+
+const publicPath = possiblePublicPaths.find((candidate) => fs.existsSync(candidate)) || possiblePublicPaths[0];
+
+if (!fs.existsSync(publicPath)) {
+    throw new Error(`No se encontró la carpeta pública del frontend. Revisar rutas: ${possiblePublicPaths.join(', ')}`);
+}
+
 async function generateSecureNip() {
     const nip = generateNip();
     const nipHash = await hashNip(nip);
     return { nip, nipHash };
-}
-
-let publicPath = path.resolve(__dirname, '../../FRONTEND/src/app/public');
-if (!fs.existsSync(publicPath)) {
-    publicPath = path.resolve(__dirname, '../../app/public');
 }
 
 app.use(express.static(publicPath));
@@ -52,10 +60,13 @@ async function ensureTables() {
                 fullname TEXT,
                 email TEXT UNIQUE,
                 birthdate DATE,
+                phone TEXT,
                 password TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+
+        await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT');
 
         await pool.query(`
             CREATE TABLE IF NOT EXISTS cuentas (
@@ -228,11 +239,7 @@ async function getSessionDataByEmail(email) {
 }
 
 app.get('/', (req, res) => {
-    const loginFile = path.join(publicPath, 'pages', 'login.html');
-    if (fs.existsSync(loginFile)) {
-        return res.sendFile(loginFile);
-    }
-    return res.redirect('/login.html');
+    res.sendFile(path.join(publicPath, 'pages', 'login.html'));
 });
 
 app.get('/login.html', (req, res) => {
@@ -288,53 +295,62 @@ app.get('/api/session', async (req, res) => {
 app.post('/api/verification/send', async (req, res) => {
     const { phone, email } = req.body;
     const normalizedPhone = normalizePhone(phone);
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+
+    if (!normalizedEmail) {
+        return res.status(400).json({ success: false, message: 'Debes ingresar un correo electrónico válido.' });
+    }
 
     if (!normalizedPhone || normalizedPhone.length < 10) {
-        return res.status(400).json({ success: false, message: 'Debes ingresar un número de teléfono válido para recibir el código.' });
+        return res.status(400).json({ success: false, message: 'Debes ingresar un número de teléfono válido para guardar el dato del usuario.' });
     }
 
     try {
         const code = generateVerificationCode();
-        storeVerificationCode(normalizedPhone, code, 5 * 60 * 1000);
-
-        await enviarSMS(normalizedPhone, code);
-
-        console.log(`Código de verificación enviado a ${normalizedPhone} para ${email || 'usuario sin email'}`);
+        await enviarCorreoVerificacion(normalizedEmail, code);
+        storeVerificationCode(normalizedEmail, code, 5 * 60 * 1000);
 
         return res.json({
             success: true,
-            message: 'Código de verificación enviado al número ingresado.'
+            message: 'Código de verificación enviado al correo electrónico.'
         });
     } catch (error) {
-        console.error('Error enviando el código de verificación:', error);
-        return res.status(500).json({ success: false, message: 'No se pudo enviar el código de verificación.' });
+        console.error('Error enviando el código de verificación por email:', error);
+        return res.status(500).json({ success: false, message: error && error.message ? error.message : 'No se pudo enviar el código de verificación al correo.' });
     }
 });
 
 app.post('/api/verification/verify', async (req, res) => {
-    const { phone, code } = req.body;
+    const { phone, email, code } = req.body;
     const normalizedPhone = normalizePhone(phone);
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const verificationTarget = normalizedEmail || normalizedPhone;
 
-    if (!normalizedPhone || !code) {
-        return res.status(400).json({ success: false, message: 'Número y código requeridos' });
+    if (!verificationTarget || !code) {
+        return res.status(400).json({ success: false, message: 'Correo o teléfono y código requeridos' });
     }
 
-    const valid = consumeVerificationCode(normalizedPhone, code);
+    const valid = consumeVerificationCode(verificationTarget, code);
 
     if (!valid) {
         return res.status(401).json({ success: false, message: 'El código de verificación es inválido o expiró.' });
     }
 
-    markPhoneVerified(normalizedPhone, 10 * 60 * 1000);
+    if (normalizedEmail) {
+        markEmailVerified(normalizedEmail, 10 * 60 * 1000);
+    } else {
+        markPhoneVerified(normalizedPhone, 10 * 60 * 1000);
+    }
 
     return res.json({ success: true, message: 'Código verificado correctamente.' });
 });
 
 app.post('/api/auth', async (req, res) => {
-    const { email, fullname, birthdate, password, phone, verificationCode } = req.body;
+    const { email, fullname, birthdate, password, phone } = req.body;
     const normalizedPhone = normalizePhone(phone);
+    const normalizedEmail = String(email || '').trim().toLowerCase();
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
         return res.status(400).json({ success: false, message: 'email y password requeridos' });
     }
 
@@ -342,24 +358,21 @@ app.post('/api/auth', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Debes ingresar tu número de teléfono para continuar.' });
     }
 
-    const phoneWasVerified = isPhoneVerified(normalizedPhone);
-    const verifiedByCode = verificationCode ? (consumeVerificationCode(normalizedPhone, verificationCode) || phoneWasVerified) : phoneWasVerified;
-
-    if (!verifiedByCode) {
-        return res.status(401).json({ success: false, message: 'Debes verificar el código enviado al número.' });
-    }
-
-    if (verificationCode && !phoneWasVerified) {
-        markPhoneVerified(normalizedPhone, 10 * 60 * 1000);
+    if (!isEmailVerified(normalizedEmail)) {
+        return res.status(401).json({ success: false, message: 'Debes verificar el código enviado al correo electrónico.' });
     }
 
     try {
-        const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
 
         if (rows.length > 0) {
             const user = rows[0];
             const match = await bcrypt.compare(password, user.password);
             if (match) {
+                if (normalizedPhone && (!user.phone || user.phone !== normalizedPhone)) {
+                    await pool.query('UPDATE users SET phone = $1 WHERE id = $2', [normalizedPhone, user.id]);
+                }
+
                 const bankData = await getBankDataForUser(user.id);
 
                 return res.json({ success: true, message: 'Login exitoso', user: { id: user.id, fullname: user.fullname, email: user.email }, bankData });
@@ -370,12 +383,12 @@ app.post('/api/auth', async (req, res) => {
 
         const hashed = await bcrypt.hash(password, 10);
         const userInsert = await pool.query(
-            'INSERT INTO users(fullname, email, birthdate, password) VALUES($1,$2,$3,$4) RETURNING id',
-            [fullname || null, email, birthdate || null, hashed]
+            'INSERT INTO users(fullname, email, birthdate, password, phone) VALUES($1,$2,$3,$4,$5) RETURNING id',
+            [fullname || null, normalizedEmail, birthdate || null, hashed, normalizedPhone]
         );
 
         const bankData = await createBankAccountForUser(userInsert.rows[0].id);
-        console.log('Usuario registrado:', { userId: userInsert.rows[0].id, email, phone: normalizedPhone });
+        console.log('Usuario registrado:', { userId: userInsert.rows[0].id, email: normalizedEmail, phone: normalizedPhone });
 
         return res.json({
             success: true,
@@ -383,7 +396,7 @@ app.post('/api/auth', async (req, res) => {
             user: {
                 id: userInsert.rows[0].id,
                 fullname: fullname || null,
-                email
+                email: normalizedEmail
             },
             bankData
         });
