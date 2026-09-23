@@ -1,6 +1,8 @@
 * {
     box-sizing: border-box;
 }
+
+/* Antes era "body": Angular encapsula el CSS, por eso :host */
 :host {
     display: flex;
     flex-direction: column;
@@ -8,19 +10,16 @@
     justify-content: center;
     min-height: 100vh;
     padding: 24px;
+    box-sizing: border-box;
     background: radial-gradient(circle at top, #1f3f5f 0%, #0d1b2a 42%, #091421 100%);
     color: #edf6ff;
     font-family: Arial, sans-serif;
 }
 
-input, button {
+input,
+button {
     font-family: inherit;
-}
-
-.error {
-    margin: 0;
-    color: #ff9b9b;
-    font-size: 0.9rem;
+    font-size: 1rem;
 }
 
 .inicio {
@@ -80,19 +79,39 @@ input, button {
     width: 100%;
 }
 
+.password-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.password-row .liquid-glass-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.toggle-label {
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
 input.liquid-glass-input,
 textarea.liquid-glass-input,
 select.liquid-glass-input {
-    background: linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0.08));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08));
     backdrop-filter: blur(18px) saturate(140%);
     -webkit-backdrop-filter: blur(18px) saturate(140%);
-    border: 1px solid rgba(255,255,255,0.3);
+    border: 1px solid rgba(255, 255, 255, 0.3);
     border-radius: 14px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.5);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.5);
     color: #edf6ff;
     padding: 14px 16px;
     outline: none;
     transition: all .2s ease;
+    color-scheme: dark;
 }
 
 input.liquid-glass-input::placeholder {
@@ -106,18 +125,18 @@ input.liquid-glass-input:focus,
 textarea.liquid-glass-input:focus,
 select.liquid-glass-input:focus {
     transform: translateY(-2px);
-    box-shadow: 0 14px 40px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.6);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.6);
     border-color: #90e0ef;
 }
 
-.correo.liquid-glass-btn {
+.liquid-glass-btn {
     width: 100%;
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.08));
     backdrop-filter: blur(20px) saturate(150%);
     -webkit-backdrop-filter: blur(20px) saturate(150%);
     border: 1px solid rgba(255, 255, 255, 0.35);
     border-radius: 18px;
-    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255,255,255,0.5);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.5);
     color: #edf6ff;
     font-weight: 700;
     cursor: pointer;
@@ -128,12 +147,18 @@ select.liquid-glass-input:focus {
     padding: 15px 18px;
 }
 
-.correo.liquid-glass-btn:hover {
+.liquid-glass-btn:hover {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.15));
     transform: translateY(-2px);
 }
 
-.correo.liquid-glass-btn:active,
+.liquid-glass-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.liquid-glass-btn:active,
 input.liquid-glass-input:active {
     transform: translateY(1px);
 }
@@ -141,10 +166,17 @@ input.liquid-glass-input:active {
 .small {
     font-size: 0.9rem;
     color: #dfeaf8;
+    margin: 0;
+}
+
+.error {
+    margin: 0;
+    color: #ff9b9b;
+    font-size: 0.9rem;
 }
 
 @media (max-width: 520px) {
-    body {
+    :host {
         padding: 16px;
     }
 
@@ -158,4 +190,3 @@ input.liquid-glass-input:active {
         height: 48px;
     }
 }
-

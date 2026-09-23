@@ -4,20 +4,34 @@
 
 <div class="info" *ngIf="step === 'form'">
     <form id="auth-form" class="login-form" (ngSubmit)="enviarCodigo()">
-        <input id="email" class="correo liquid-glass-input" type="email" name="email" placeholder="Correo electrónico" [(ngModel)]="email" required>
-        <input id="fullname" class="liquid-glass-input" type="text" name="fullname" placeholder="Nombre completo" [(ngModel)]="fullname">
-        <label class="small">Fecha de nacimiento</label>
-        <input id="birthdate" class="liquid-glass-input" type="date" name="birthdate" [(ngModel)]="birthdate">
-        <input id="phone" class="liquid-glass-input" type="tel" inputmode="numeric" maxlength="10" name="phone" placeholder="Número de celular (10 dígitos)" [(ngModel)]="phone" required>
-        <div style="display:flex;align-items:center;gap:8px;">
-            <input id="password" class="liquid-glass-input" [type]="mostrarPassword ? 'text' : 'password'" name="password" placeholder="Contraseña" [(ngModel)]="password" required>
-            <label style="font-size:0.9rem;display:flex;align-items:center;gap:6px;">
-                <input id="toggle-password" type="checkbox" name="togglePassword" [(ngModel)]="mostrarPassword"> Mostrar
+        <input id="email" class="correo liquid-glass-input" type="email" name="email"
+               placeholder="Correo electrónico" [(ngModel)]="email" required>
+
+        <input id="fullname" class="liquid-glass-input" type="text" name="fullname"
+               placeholder="Nombre completo" [(ngModel)]="fullname">
+
+        <label class="small" for="birthdate">Fecha de nacimiento</label>
+        <input id="birthdate" class="liquid-glass-input" type="date" name="birthdate"
+               [(ngModel)]="birthdate">
+
+        <input id="phone" class="liquid-glass-input" type="tel" inputmode="numeric" maxlength="10"
+               name="phone" placeholder="Número de celular (10 dígitos)"
+               [(ngModel)]="phone" (input)="soloNumeros()" required>
+
+        <div class="password-row">
+            <input id="password" class="liquid-glass-input"
+                   [type]="mostrarPassword ? 'text' : 'password'" name="password"
+                   placeholder="Contraseña" [(ngModel)]="password" required>
+            <label class="toggle-label">
+                <input id="toggle-password" type="checkbox" name="togglePassword"
+                       [(ngModel)]="mostrarPassword"> Mostrar
             </label>
         </div>
+
         <button type="submit" class="correo liquid-glass-btn" [disabled]="loading">
             {{ loading ? 'Enviando...' : 'Enviar código y continuar' }}
         </button>
+
         <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
     </form>
 </div>
@@ -25,11 +39,16 @@
 <div class="info" *ngIf="step === 'code'">
     <form id="code-form" class="login-form" (ngSubmit)="verificarYAutenticar()">
         <p class="small">Ingresa el código que enviamos a {{ email }}</p>
-        <input id="code" class="liquid-glass-input" type="text" inputmode="numeric" maxlength="6" name="code" placeholder="Código de verificación" [(ngModel)]="code" required>
+
+        <input id="code" class="liquid-glass-input" type="text" inputmode="numeric" maxlength="6"
+               name="code" placeholder="Código de verificación" [(ngModel)]="code" required>
+
         <button type="submit" class="correo liquid-glass-btn" [disabled]="loading">
             {{ loading ? 'Verificando...' : 'Verificar e iniciar sesión' }}
         </button>
-        <button type="button" class="liquid-glass-btn" (click)="volver()">Volver</button>
+
+        <button type="button" class="correo liquid-glass-btn" (click)="volver()">Volver</button>
+
         <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
     </form>
 </div>
