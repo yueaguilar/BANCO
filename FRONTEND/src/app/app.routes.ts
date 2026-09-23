@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { LoginBanco } from './componentes/login-banco/login'; // <-- ajusta esta ruta a tu carpeta real
 import { Principal } from './componentes/app-banco/app';
 import { Cuenta } from './componentes/cuenta-banco/cuenta';
 import { Mas } from './componentes/mas-banco/mas';
@@ -11,9 +12,10 @@ import { Servicios } from './componentes/servicios-banco/servicios';
 import { Transferir } from './componentes/transferencia.banco/transferir';
 import { Verificacion } from './componentes/veri-banco/veri';
 
-// Agrega estas rutas a las que ya tienes (login, etc.)
 export const routes: Routes = [
-  { path: 'principal', component: Principal },
+  { path: '', redirectTo: 'login', pathMatch: 'full' },
+  { path: 'login', component: LoginBanco },
+  { path: 'app', component: Principal },
   { path: 'cuenta', component: Cuenta },
   { path: 'mas', component: Mas },
   { path: 'movimientos', component: Movimientos },
@@ -24,4 +26,5 @@ export const routes: Routes = [
   { path: 'servicios', component: Servicios },
   { path: 'transferir', component: Transferir },
   { path: 'verificacion', component: Verificacion },
+  { path: '**', redirectTo: 'login' },
 ];
