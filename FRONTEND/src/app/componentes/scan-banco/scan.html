@@ -1,50 +1,33 @@
-<!DOCTYPE html>
-<html lang="es">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>LCDK | Escanear QR</title>
-        <link rel="icon" type="image/png" href="../aseets/logo2.png">
-        <link rel="stylesheet" href="./app.css">
-        <link rel="stylesheet" href="./scan.css">
-    </head>
-    <body>
-        <header class="topbar">
-            <div class="topbar-inner">
-                <a href="transferir.html" class="icon-btn back-btn" aria-label="Volver">← Volver</a>
-                <h1 class="brand">LCDKK</h1>
-                <a href="cuenta.html" class="icon-btn">Perfil</a>
+<header class="topbar">
+    <div class="topbar-inner">
+        <a href="transferir.html" class="icon-btn back-btn" aria-label="Volver">← Volver</a>
+        <h1 class="brand">LCDKK</h1>
+        <a href="cuenta.html" class="icon-btn">Perfil</a>
+    </div>
+</header>
+
+<main class="scan-shell">
+    <section class="scan-card">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">Transferencia</p>
+                <h2>Escanear código QR</h2>
             </div>
-        </header>
+        </div>
 
-        <main class="scan-shell">
-            <section class="scan-card">
-                <div class="section-header">
-                    <div>
-                        <p class="eyebrow">Transferencia</p>
-                        <h2>Escanear código QR</h2>
-                    </div>
-                </div>
+        <div class="scan-instructions">
+            <p>Alineá el código QR dentro del recuadro. El escáner utilizará la cámara del dispositivo.</p>
+        </div>
 
-                <div class="scan-instructions">
-                    <p>Alineá el código QR dentro del recuadro. El escáner utilizará la cámara del dispositivo.</p>
-                </div>
+        <div id="qr-reader" class="qr-reader"></div>
 
-                <div id="qr-reader" class="qr-reader"></div>
+        <div class="scan-actions">
+            <button id="stopBtn" type="button" class="secondary-btn">Cancelar</button>
+        </div>
 
-                <div class="scan-actions">
-                    <button id="stopBtn" type="button" class="secondary-btn">Cancelar</button>
-                </div>
-
-                <div id="scanResult" class="scan-result hidden">
-                    <h3>Resultado</h3>
-                    <pre id="decodedText"></pre>
-                </div>
-            </section>
-        </main>
-
-        <!-- html5-qrcode CDN -->
-        <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
-        <script src="./scan.js"></script>
-    </body>
-</html>
+        <div id="scanResult" class="scan-result hidden">
+            <h3>Resultado</h3>
+            <pre id="decodedText"></pre>
+        </div>
+    </section>
+</main>

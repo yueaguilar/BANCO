@@ -1,20 +1,18 @@
 import { AfterViewInit, Component, OnDestroy } from '@angular/core';
 import { iniciarNavIndicador } from '../nav-indicator';
-import { iniciarApp } from './app-logic';
 
 @Component({
-  selector: 'app-principal',
+  selector: 'app-cuenta',
   standalone: true,
-  templateUrl: './app.html',
-  styleUrls: ['./app.css']
+  templateUrl: './cuenta.html',
+  styleUrls: ['./cuenta.css']
 })
-export class Principal implements AfterViewInit, OnDestroy {
-
+export class Cuenta implements AfterViewInit, OnDestroy {
   private limpiarNav?: () => void;
 
   ngAfterViewInit(): void {
     this.limpiarNav = iniciarNavIndicador();
-    iniciarApp();
+    // Pega aquí la lógica de cuenta.js
   }
 
   ngOnDestroy(): void {

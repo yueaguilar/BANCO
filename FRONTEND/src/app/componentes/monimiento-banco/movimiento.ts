@@ -1,20 +1,18 @@
 import { AfterViewInit, Component, OnDestroy } from '@angular/core';
 import { iniciarNavIndicador } from '../nav-indicator';
-import { iniciarApp } from './app-logic';
 
 @Component({
-  selector: 'app-principal',
+  selector: 'app-movimientos',
   standalone: true,
-  templateUrl: './app.html',
-  styleUrls: ['./app.css']
+  templateUrl: './movimientos.html',
+  styleUrls: ['./movimientos.css']
 })
-export class Principal implements AfterViewInit, OnDestroy {
-
+export class Movimientos implements AfterViewInit, OnDestroy {
   private limpiarNav?: () => void;
 
   ngAfterViewInit(): void {
     this.limpiarNav = iniciarNavIndicador();
-    iniciarApp();
+    // Pega aquí la lógica de movimientos.js
   }
 
   ngOnDestroy(): void {

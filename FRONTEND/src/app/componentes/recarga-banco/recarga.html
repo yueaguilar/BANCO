@@ -1,108 +1,93 @@
-<!DOCTYPE html>
-<html lang="es">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>LCDK | Recargar</title>
-        <link rel="icon" type="image/png" href="../aseets/logo2.png">
-        <link rel="stylesheet" href="./cuenta.css">
-        <link rel="stylesheet" href="./recargar.css">
-    </head>
-    <body>
-        <header class="topbar">
-            <div class="topbar-inner">
-                <a href="cuenta.html" class="icon-btn back-btn" aria-label="Volver a cuenta">← Volver</a>
-                <h1 class="brand">LCDKK</h1>
-                <a href="cuenta.html" class="icon-btn">Perfil</a>
+<header class="topbar">
+    <div class="topbar-inner">
+        <a href="cuenta.html" class="icon-btn back-btn" aria-label="Volver a cuenta">← Volver</a>
+        <h1 class="brand">LCDKK</h1>
+        <a href="cuenta.html" class="icon-btn">Perfil</a>
+    </div>
+</header>
+
+<main class="page-shell recharge-shell">
+    <section class="profile-header glass-card recharge-header">
+        <div class="profile-meta">
+            <div class="avatar">R</div>
+            <div>
+                <p class="eyebrow">Recarga</p>
+                <h2>Recargar celular</h2>
             </div>
-        </header>
+        </div>
+        <span class="account-badge" id="balanceBadge">Saldo: $0,00</span>
+    </section>
 
-        <main class="page-shell recharge-shell">
-            <section class="profile-header glass-card recharge-header">
-                <div class="profile-meta">
-                    <div class="avatar">R</div>
-                    <div>
-                        <p class="eyebrow">Recarga</p>
-                        <h2>Recargar celular</h2>
-                    </div>
-                </div>
-                <span class="account-badge" id="balanceBadge">Saldo: $0,00</span>
-            </section>
-
-            <section class="glass-card recharge-panel">
-                <div class="panel-top">
-                    <div>
-                        <p class="label">Destino</p>
-                        <strong class="destination-name">Celular</strong>
-                    </div>
-                    <button class="link-btn simple-btn" id="quickFillBtn" type="button">Recarga rápida</button>
-                </div>
-
-                <div class="field-group">
-                    <label class="field-label" for="phoneInput">Número</label>
-                    <div class="phone-box">
-                        <span class="country-code">+54</span>
-                        <input id="phoneInput" type="tel" inputmode="numeric" maxlength="10" placeholder="1123456789" value="1123456789">
-                    </div>
-                </div>
-
-                <div class="field-group">
-                    <label class="field-label">Operador</label>
-                    <div class="carrier-grid" role="group" aria-label="Operadores disponibles">
-                        <button class="carrier selected" data-carrier="Personal" type="button">Personal</button>
-                        <button class="carrier" data-carrier="Claro" type="button">Claro</button>
-                        <button class="carrier" data-carrier="Movistar" type="button">Movistar</button>
-                    </div>
-                </div>
-
-                <div class="field-group">
-                    <label class="field-label" for="amountInput">Monto</label>
-                    <div class="amount-box">
-                        <span class="currency">$</span>
-                        <input id="amountInput" type="number" min="1" step="1" value="1500" placeholder="0">
-                    </div>
-                </div>
-
-                <div class="quick-amounts" aria-label="Montos sugeridos">
-                    <button type="button" class="amount-pill" data-amount="500">$500</button>
-                    <button type="button" class="amount-pill" data-amount="1000">$1.000</button>
-                    <button type="button" class="amount-pill" data-amount="1500">$1.500</button>
-                    <button type="button" class="amount-pill" data-amount="2500">$2.500</button>
-                </div>
-
-                <div class="summary-card">
-                    <div class="summary-row">
-                        <span>Monto</span>
-                        <strong id="summaryAmount">$ 1.500,00</strong>
-                    </div>
-                    <div class="summary-row">
-                        <span>Comisión</span>
-                        <strong id="summaryFee">$ 0,00</strong>
-                    </div>
-                    <div class="summary-row total-row">
-                        <span>Total</span>
-                        <strong id="summaryTotal">$ 1.500,00</strong>
-                    </div>
-                </div>
-
-                <div id="errorBox" class="message error hidden" role="alert"></div>
-            </section>
-
-            <div class="recharge-actions">
-                <button id="cancelBtn" type="button" class="secondary-btn">Cancelar</button>
-                <button id="confirmBtn" type="button" class="primary-btn">Confirmar recarga</button>
+    <section class="glass-card recharge-panel">
+        <div class="panel-top">
+            <div>
+                <p class="label">Destino</p>
+                <strong class="destination-name">Celular</strong>
             </div>
-        </main>
+            <button class="link-btn simple-btn" id="quickFillBtn" type="button">Recarga rápida</button>
+        </div>
 
-        <div id="successModal" class="success-modal hidden" role="dialog" aria-modal="true">
-            <div class="success-card">
-                <div class="success-icon">✓</div>
-                <h3>Recarga confirmada</h3>
-                <p id="successMessage">Tu recarga fue realizada correctamente.</p>
-                <button id="backBtn" type="button" class="primary-btn full">Volver a cuenta</button>
+        <div class="field-group">
+            <label class="field-label" for="phoneInput">Número</label>
+            <div class="phone-box">
+                <span class="country-code">+54</span>
+                <input id="phoneInput" type="tel" inputmode="numeric" maxlength="10" placeholder="1123456789" value="1123456789">
             </div>
         </div>
 
-        <script src="./recarga.js"></script>
-    </body>
-</html>
+        <div class="field-group">
+            <label class="field-label">Operador</label>
+            <div class="carrier-grid" role="group" aria-label="Operadores disponibles">
+                <button class="carrier selected" data-carrier="Personal" type="button">Personal</button>
+                <button class="carrier" data-carrier="Claro" type="button">Claro</button>
+                <button class="carrier" data-carrier="Movistar" type="button">Movistar</button>
+            </div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label" for="amountInput">Monto</label>
+            <div class="amount-box">
+                <span class="currency">$</span>
+                <input id="amountInput" type="number" min="1" step="1" value="1500" placeholder="0">
+            </div>
+        </div>
+
+        <div class="quick-amounts" aria-label="Montos sugeridos">
+            <button type="button" class="amount-pill" data-amount="500">$500</button>
+            <button type="button" class="amount-pill" data-amount="1000">$1.000</button>
+            <button type="button" class="amount-pill" data-amount="1500">$1.500</button>
+            <button type="button" class="amount-pill" data-amount="2500">$2.500</button>
+        </div>
+
+        <div class="summary-card">
+            <div class="summary-row">
+                <span>Monto</span>
+                <strong id="summaryAmount">$ 1.500,00</strong>
+            </div>
+            <div class="summary-row">
+                <span>Comisión</span>
+                <strong id="summaryFee">$ 0,00</strong>
+            </div>
+            <div class="summary-row total-row">
+                <span>Total</span>
+                <strong id="summaryTotal">$ 1.500,00</strong>
+            </div>
+        </div>
+
+        <div id="errorBox" class="message error hidden" role="alert"></div>
+    </section>
+
+    <div class="recharge-actions">
+        <button id="cancelBtn" type="button" class="secondary-btn">Cancelar</button>
+        <button id="confirmBtn" type="button" class="primary-btn">Confirmar recarga</button>
+    </div>
+</main>
+
+<div id="successModal" class="success-modal hidden" role="dialog" aria-modal="true">
+    <div class="success-card">
+        <div class="success-icon">✓</div>
+        <h3>Recarga confirmada</h3>
+        <p id="successMessage">Tu recarga fue realizada correctamente.</p>
+        <button id="backBtn" type="button" class="primary-btn full">Volver a cuenta</button>
+    </div>
+</div>

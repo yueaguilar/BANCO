@@ -1,103 +1,57 @@
-<!DOCTYPE html>
-<html lang="es">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>LCDK|Principal</title>
-        <link rel="icon" type="image/png" href="../aseets/logo2.png">
-        <link rel="stylesheet" href="./app.css">
-    </head>
-    <body>
-        <header class="topbar">
-            <div class="topbar-inner">
-                <a href="app.html" aria-label="Ir al inicio"><img src="../aseets/logo2.png" alt="logo" class="logo"></a>
-                <h1 class="brand">LCDKK</h1>
-                <a href="cuenta.html" class="icon-btn" id="profileBtn">Perfil</a>
-            </div>
-        </header>
-        
-        <main class="container">
-            <section class="balance-card">
-                <div class="balance-left">
-                    <p class="small">Saldo disponible</p>
-                    <h2 id="balance">Cargando saldo...</h2>
-                </div>
-                <div class="balance-right">
-                    <button class="primary" id="pagarBtn" type="button">Pagar</button>
-                    <button class="outline" id="transferirBtn" type="button">Transferir</button>
-                </div>
-            </section>
+<header class="topbar">
+    <div class="topbar-inner">
+        <a href="app.html" aria-label="Ir al inicio"><img src="../aseets/logo2.png" alt="logo" class="logo"></a>
+        <h1 class="brand">LCDKK</h1>
+        <a href="cuenta.html" class="icon-btn" id="profileBtn">Perfil</a>
+    </div>
+</header>
 
-            <section class="quick-actions">
-                <button class="action" id="cargarBtn">Depositar</button>
-                <button class="action" id="recargarBtn">Recargar celular</button>
-                <button class="action" id="serviciosBtn">Servicios</button>
-                <button class="action" id="qrBtn">Generar QR</button>
-            </section>
-
-            <section class="transactions">
-                <div class="transactions-header">
-                    <h3>Últimas actividades</h3>
-                    <button id="verTodas" class="link-btn">Ver Todas</button>
-                </div>
-                <ul id="txList" class="tx-list">
-                    <!-- transacciones renderizadas por JS -->
-                </ul>
-            </section>
-        </main>
-
-        <nav class="bottom-nav">
-            <span class="nav-indicator" aria-hidden="true"></span>
-            <a href="app.html" class="nav-item active">Inicio</a>
-            <a href="movimientos.html" class="nav-item">Movimientos</a>
-            <a href="cuenta.html" class="nav-item">Cuenta</a>
-            <a href="mas.html" class="nav-item">Más</a>
-        </nav>
-
-        <script>
-            document.addEventListener('DOMContentLoaded', () => {
-                const nav = document.querySelector('.bottom-nav');
-                const indicator = nav?.querySelector('.nav-indicator');
-                const items = Array.from(nav?.querySelectorAll('.nav-item') || []);
-                if (!nav || !indicator || !items.length) return;
-
-                const moveIndicator = (target) => {
-                    const navRect = nav.getBoundingClientRect();
-                    const targetRect = target.getBoundingClientRect();
-                    indicator.style.width = `${targetRect.width}px`;
-                    indicator.style.transform = `translateX(${targetRect.left - navRect.left}px)`;
-                };
-
-                const current = items.find(item => item.classList.contains('active')) || items[0];
-                moveIndicator(current);
-
-                window.addEventListener('resize', () => {
-                    const active = document.querySelector('.nav-item.active') || items[0];
-                    moveIndicator(active);
-                });
-
-                items.forEach((item) => {
-                    item.addEventListener('click', () => {
-                        items.forEach((el) => el.classList.remove('active'));
-                        item.classList.add('active');
-                        moveIndicator(item);
-                    });
-                });
-            });
-        </script>
-
-        <div id="modal" class="modal hidden">
-            <div class="modal-panel">
-                <button id="closeModal" class="close">×</button>
-                <h3>Historial completo</h3>
-                <ul id="modalList" class="tx-list"></ul>
-            </div>
+<main class="container">
+    <section class="balance-card">
+        <div class="balance-left">
+            <p class="small">Saldo disponible</p>
+            <h2 id="balance">Cargando saldo...</h2>
         </div>
-
-        <div id="paymentToast" class="toast hidden" role="status" aria-live="polite">
-            Pago realizado con éxito
+        <div class="balance-right">
+            <button class="primary" id="pagarBtn" type="button">Pagar</button>
+            <button class="outline" id="transferirBtn" type="button">Transferir</button>
         </div>
+    </section>
 
-        <script src="./app.js"></script>
-    </body>
-</html>
+    <section class="quick-actions">
+        <button class="action" id="cargarBtn">Depositar</button>
+        <button class="action" id="recargarBtn">Recargar celular</button>
+        <button class="action" id="serviciosBtn">Servicios</button>
+        <button class="action" id="qrBtn">Generar QR</button>
+    </section>
+
+    <section class="transactions">
+        <div class="transactions-header">
+            <h3>Últimas actividades</h3>
+            <button id="verTodas" class="link-btn">Ver Todas</button>
+        </div>
+        <ul id="txList" class="tx-list">
+            <!-- transacciones renderizadas por JS -->
+        </ul>
+    </section>
+</main>
+
+<nav class="bottom-nav">
+    <span class="nav-indicator" aria-hidden="true"></span>
+    <a href="app.html" class="nav-item active">Inicio</a>
+    <a href="movimientos.html" class="nav-item">Movimientos</a>
+    <a href="cuenta.html" class="nav-item">Cuenta</a>
+    <a href="mas.html" class="nav-item">Más</a>
+</nav>
+
+<div id="modal" class="modal hidden">
+    <div class="modal-panel">
+        <button id="closeModal" class="close">×</button>
+        <h3>Historial completo</h3>
+        <ul id="modalList" class="tx-list"></ul>
+    </div>
+</div>
+
+<div id="paymentToast" class="toast hidden" role="status" aria-live="polite">
+    Pago realizado con éxito
+</div>

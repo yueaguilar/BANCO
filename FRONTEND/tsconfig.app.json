@@ -9,7 +9,7 @@
   },
   "include": [
     "src/**/*.ts"
-  ],
+, "src/app/componentes/app-banco/app-logic.js"  ],
   "exclude": [
     "src/**/*.spec.ts"
   ]
