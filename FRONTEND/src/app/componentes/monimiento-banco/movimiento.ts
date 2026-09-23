@@ -1,5 +1,6 @@
 import { AfterViewInit, Component, OnDestroy } from '@angular/core';
 import { iniciarNavIndicador } from '../nav-indicator';
+import { iniciarApp } from './movimientos-logic';
 
 @Component({
   selector: 'app-movimientos',
@@ -12,7 +13,7 @@ export class Movimientos implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     this.limpiarNav = iniciarNavIndicador();
-    // Pega aquí la lógica de movimientos.js
+    iniciarApp();
   }
 
   ngOnDestroy(): void {

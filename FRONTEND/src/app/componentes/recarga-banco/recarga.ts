@@ -1,4 +1,5 @@
 import { AfterViewInit, Component } from '@angular/core';
+import { iniciarRecarga } from './recarga-logic';
 
 @Component({
   selector: 'app-recarga',
@@ -8,6 +9,6 @@ import { AfterViewInit, Component } from '@angular/core';
 })
 export class Recarga implements AfterViewInit {
   ngAfterViewInit(): void {
-    // Pega aquí la lógica de recarga.js
+    iniciarRecarga();
   }
 }

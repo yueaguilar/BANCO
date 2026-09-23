@@ -1,4 +1,5 @@
 import { AfterViewInit, Component } from '@angular/core';
+import { iniciarQr } from './qr-logic';
 
 @Component({
   selector: 'app-qr',
@@ -8,6 +9,6 @@ import { AfterViewInit, Component } from '@angular/core';
 })
 export class Qr implements AfterViewInit {
   ngAfterViewInit(): void {
-    // Pega aquí la lógica de qr.js
+    iniciarQr();
   }
 }

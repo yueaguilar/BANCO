@@ -1,5 +1,6 @@
 import { AfterViewInit, Component, OnDestroy } from '@angular/core';
 import { iniciarNavIndicador } from '../nav-indicator';
+import { iniciarApp } from './cuenta-logic';
 
 @Component({
   selector: 'app-cuenta',
@@ -12,7 +13,7 @@ export class Cuenta implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     this.limpiarNav = iniciarNavIndicador();
-    // Pega aquí la lógica de cuenta.js
+    iniciarApp();
   }
 
   ngOnDestroy(): void {

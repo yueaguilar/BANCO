@@ -1,4 +1,5 @@
 import { AfterViewInit, Component } from '@angular/core';
+import { iniciarServicios } from './servicios-logic';
 
 @Component({
   selector: 'app-servicios',
@@ -8,6 +9,6 @@ import { AfterViewInit, Component } from '@angular/core';
 })
 export class Servicios implements AfterViewInit {
   ngAfterViewInit(): void {
-    // Pega aquí la lógica de servicios.js
+    iniciarServicios();
   }
 }

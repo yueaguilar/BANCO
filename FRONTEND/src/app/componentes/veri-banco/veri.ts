@@ -1,4 +1,5 @@
 import { AfterViewInit, Component } from '@angular/core';
+import { iniciarVerificacion } from './veri-logic';
 
 @Component({
   selector: 'app-verificacion',
@@ -8,6 +9,6 @@ import { AfterViewInit, Component } from '@angular/core';
 })
 export class Verificacion implements AfterViewInit {
   ngAfterViewInit(): void {
-    // Pega aquí la lógica de veri.js
+    iniciarVerificacion();
   }
 }

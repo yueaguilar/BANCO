@@ -1,4 +1,5 @@
-import { AfterViewInit, Component } from '@angular/core';
+import { AfterViewInit, Component, OnDestroy } from '@angular/core';
+import { iniciarScan } from './scan-logic';
 
 @Component({
   selector: 'app-scan',
@@ -6,8 +7,14 @@ import { AfterViewInit, Component } from '@angular/core';
   templateUrl: './scan.html',
   styleUrls: ['./scan.css']
 })
-export class Scan implements AfterViewInit {
+export class Scan implements AfterViewInit, OnDestroy {
+  private limpiarScan?: () => void;
+
   ngAfterViewInit(): void {
-    // Pega aquí la lógica de scan.js
+    this.limpiarScan = iniciarScan();
+  }
+
+  ngOnDestroy(): void {
+    this.limpiarScan?.();
   }
 }

@@ -1,4 +1,5 @@
 import { AfterViewInit, Component } from '@angular/core';
+import { iniciarTransferir } from './transferir-logic';
 
 @Component({
   selector: 'app-transferir',
@@ -8,6 +9,6 @@ import { AfterViewInit, Component } from '@angular/core';
 })
 export class Transferir implements AfterViewInit {
   ngAfterViewInit(): void {
-    // Pega aquí la lógica de transferir.js
+    iniciarTransferir();
   }
 }
