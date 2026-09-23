@@ -33,15 +33,54 @@ const userNips = new Map();
 app.use(cors());
 app.use(express.json());
 
-const possiblePublicPaths = [
-    path.join(__dirname, '../../FRONTEND/src/app/public'),
+// Determinar la carpeta pública del frontend. La estructura actual coloca los HTML
+// en `FRONTEND/src/app/componentes/...` por lo que apuntamos al root `FRONTEND/src/app`.
+const candidatePaths = [
+    path.join(__dirname, '../../FRONTEND/src/app'),
+    path.join(__dirname, '../../FRONTEND/src'),
+    path.join(__dirname, '../../FRONTEND'),
     path.join(__dirname, '../../app/public')
 ];
 
-const publicPath = possiblePublicPaths.find((candidate) => fs.existsSync(candidate)) || possiblePublicPaths[0];
+const publicPath = candidatePaths.find((p) => fs.existsSync(p));
 
-if (!fs.existsSync(publicPath)) {
-    throw new Error(`No se encontró la carpeta pública del frontend. Revisar rutas: ${possiblePublicPaths.join(', ')}`);
+if (!publicPath) {
+    throw new Error(`No se encontró la carpeta pública del frontend. Revisar rutas: ${candidatePaths.join(', ')}`);
+}
+
+// Busca recursivamente un archivo HTML que coincida con `page`. Devuelve ruta absoluta o null.
+function findHtmlForPage(page) {
+    const target = `${page}.html`;
+
+    function search(dir) {
+        const items = fs.readdirSync(dir, { withFileTypes: true });
+        for (const it of items) {
+            const full = path.join(dir, it.name);
+            if (it.isFile() && it.name.toLowerCase() === target.toLowerCase()) {
+                return full;
+            }
+            if (it.isDirectory()) {
+                try {
+                    const found = search(full);
+                    if (found) return found;
+                } catch (err) {
+                    // ignorar permisos u otros errores puntuales
+                }
+            }
+        }
+        return null;
+    }
+
+    // Primero buscar en la raíz pública y luego dentro de `componentes` si existe.
+    const foundRoot = search(publicPath);
+    if (foundRoot) return foundRoot;
+
+    const componentesPath = path.join(publicPath, 'componentes');
+    if (fs.existsSync(componentesPath)) {
+        return search(componentesPath);
+    }
+
+    return null;
 }
 
 async function generateSecureNip() {
@@ -239,19 +278,27 @@ async function getSessionDataByEmail(email) {
 }
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(publicPath, 'pages', 'login.html'));
+    const file = findHtmlForPage('login') || findHtmlForPage('app') || path.join(publicPath, 'index.html');
+    if (!file || !fs.existsSync(file)) return res.status(404).send('Página de inicio no encontrada');
+    res.sendFile(file);
 });
 
 app.get('/login.html', (req, res) => {
-    res.sendFile(path.join(publicPath, 'pages', 'login.html'));
+    const file = findHtmlForPage('login');
+    if (!file) return res.status(404).send('Login no encontrado');
+    res.sendFile(file);
 });
 
 app.get('/app', (req, res) => {
-    res.sendFile(path.join(publicPath, 'pages', 'app.html'));
+    const file = findHtmlForPage('app') || findHtmlForPage('app');
+    if (!file) return res.status(404).send('App no encontrada');
+    res.sendFile(file);
 });
 
 app.get('/app.html', (req, res) => {
-    res.sendFile(path.join(publicPath, 'pages', 'app.html'));
+    const file = findHtmlForPage('app');
+    if (!file) return res.status(404).send('App no encontrada');
+    res.sendFile(file);
 });
 
 app.get('/:page.html', (req, res) => {
@@ -260,8 +307,8 @@ app.get('/:page.html', (req, res) => {
         return res.status(404).send('Página no encontrada');
     }
 
-    const filePath = path.join(publicPath, 'pages', `${page}.html`);
-    if (!fs.existsSync(filePath)) {
+    const filePath = findHtmlForPage(page);
+    if (!filePath) {
         return res.status(404).send('HTML no encontrado');
     }
 
@@ -493,8 +540,12 @@ app.get('/api/balance/:numeroCuenta', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-ensureTables().then(() => {
-    app.listen(PORT, () => {
-        console.log(`Servidor ejecutándose en http://localhost:${PORT}`);
+if (require.main === module) {
+    ensureTables().then(() => {
+        app.listen(PORT, () => {
+            console.log(`Servidor ejecutándose en http://localhost:${PORT}`);
+        });
     });
-});                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+}
+
+module.exports = app;

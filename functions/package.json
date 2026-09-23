@@ -1,0 +1,10 @@
+{
+  "name": "banco-functions",
+  "private": true,
+  "main": "index.js",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "firebase-functions": "^6.1.0"
+  }
+}
