@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "FRONTEND/src/app/componentes",
+    "public": "FRONTEND/dist/FRONTEND/browser",
     "ignore": [
       "firebase.json",
       "**/.*",
