@@ -1,18 +1,26 @@
 * {
     box-sizing: border-box;
 }
-
-body {
-    margin: 0;
-    min-height: 100vh;
+:host {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
     background: radial-gradient(circle at top, #1f3f5f 0%, #0d1b2a 42%, #091421 100%);
     color: #edf6ff;
     font-family: Arial, sans-serif;
-    padding: 24px;
+}
+
+input, button {
+    font-family: inherit;
+}
+
+.error {
+    margin: 0;
+    color: #ff9b9b;
+    font-size: 0.9rem;
 }
 
 .inicio {

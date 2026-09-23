@@ -287,3 +287,7 @@ label.small {
     border-radius: 20px;
   }
 }
+html, body {
+    margin: 0;
+    background: #091421;
+}
