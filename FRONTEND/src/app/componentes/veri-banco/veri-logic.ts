@@ -85,7 +85,7 @@ export function iniciarVerificacion(): void {
       }
 
       try {
-        const response = await fetch('/api/verification/verify', {
+        const response = await fetch(`${API_URL}/api/verification/verify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, phone, code })
@@ -101,7 +101,7 @@ export function iniciarVerificacion(): void {
           throw new Error('No hay datos de registro pendientes.');
         }
 
-        const authResponse = await fetch('/api/auth', {
+        const authResponse = await fetch(`${API_URL}/api/auth`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

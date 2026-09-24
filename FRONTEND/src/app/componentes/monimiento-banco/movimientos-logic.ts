@@ -18,6 +18,7 @@ interface SessionResponse {
   user: User;
   bankData: BankData;
 }
+import { API_URL } from '../../api-config';
 
 export async function iniciarApp(): Promise<void> {
   const formatMoney = (value: number | string | null | undefined): string => new Intl.NumberFormat('es-AR', {
@@ -43,7 +44,7 @@ export async function iniciarApp(): Promise<void> {
 
     if (!bankData) {
       try {
-        const response = await fetch(`/api/session?email=${encodeURIComponent(user.email)}`);
+        const response = await fetch(`${API_URL}/api/session?email=${encodeURIComponent(user.email)}`);
         const data: SessionResponse = await response.json();
         if (response.ok && data.success) {
           localStorage.setItem('user', JSON.stringify(data.user));

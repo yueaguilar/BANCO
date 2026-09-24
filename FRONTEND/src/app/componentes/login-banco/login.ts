@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
+import { API_URL } from '../../api-config';
 
 type Step = 'form' | 'code';
 
@@ -26,7 +27,7 @@ export class LoginBanco {
   password = '';
   code = '';
 
-  private readonly apiUrl = '/api';
+private readonly apiUrl = `${API_URL}/api`;
 
   constructor(
     private http: HttpClient,

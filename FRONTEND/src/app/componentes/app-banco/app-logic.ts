@@ -24,6 +24,7 @@ interface SessionResponse {
   user: User;
   bankData: BankData;
 }
+import { API_URL } from '../../api-config';
 
 // Interacciones principales: renderizado, modal y flujo de pago
 export async function iniciarApp(): Promise<void> {
@@ -112,7 +113,7 @@ export async function iniciarApp(): Promise<void> {
       try {
 
         const response = await fetch(
-          `/api/session?email=${encodeURIComponent(parsedUser.email)}`
+          `${API_URL}/api/session?email=${encodeURIComponent(parsedUser.email)}`
         );
 
         const data = await response.json() as SessionResponse;

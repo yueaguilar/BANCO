@@ -19,6 +19,7 @@ interface SessionData {
   bankData: BankData | null;
   success?: boolean;
 }
+import { API_URL } from '../../api-config';
 
 export async function iniciarApp(): Promise<void> {
 
@@ -75,11 +76,11 @@ export async function iniciarApp(): Promise<void> {
     try {
 
       const response = await fetch(
-        `/api/session?email=${encodeURIComponent(email)}`,
-        {
-          signal: controller.signal
-        }
-      );
+  `${API_URL}/api/session?email=${encodeURIComponent(email)}`,
+  {
+    signal: controller.signal
+  }
+);
 
       const data = await response.json() as SessionData;
 
