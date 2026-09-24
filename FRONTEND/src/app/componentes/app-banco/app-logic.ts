@@ -258,26 +258,26 @@ export async function iniciarApp(): Promise<void> {
   });
 
   pagarBtn?.addEventListener('click', () => {
-    window.location.href = 'pago.html';
+    window.location.href = '/pago';
   });
 
   transferirBtn?.addEventListener('click', () => {
-    window.location.href = 'transferir.html';
+    window.location.href = '/transferir';
   });
 
   qrBtn?.addEventListener('click', () => {
-    window.location.href = 'qr.html';
+    window.location.href = '/qr';
   });
 
   const recargarBtn = document.getElementById('recargarBtn');
 
   recargarBtn?.addEventListener('click', () => {
-    window.location.href = 'recarga.html';
+    window.location.href = '/recarga';
   });
 
   const serviciosBtn = document.getElementById('serviciosBtn');
 
   serviciosBtn?.addEventListener('click', () => {
-    window.location.href = 'servicios.html';
+    window.location.href = '/servicios';
   });
 }
