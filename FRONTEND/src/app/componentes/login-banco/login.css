@@ -51,7 +51,7 @@ button {
     display: inline-block;
     width: 150px;
     height: 64px;
-    background-image: url("../aseets/logo.png");
+    background-image: url("/logo.png");
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
