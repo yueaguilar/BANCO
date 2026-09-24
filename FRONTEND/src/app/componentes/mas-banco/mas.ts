@@ -1,4 +1,9 @@
-import { AfterViewInit, Component, OnDestroy } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  OnDestroy
+} from '@angular/core';
+
 import { iniciarNavIndicador } from '../nav-indicator';
 
 @Component({
@@ -8,6 +13,7 @@ import { iniciarNavIndicador } from '../nav-indicator';
   styleUrls: ['./mas.css']
 })
 export class Mas implements AfterViewInit, OnDestroy {
+
   private limpiarNav?: () => void;
 
   ngAfterViewInit(): void {
