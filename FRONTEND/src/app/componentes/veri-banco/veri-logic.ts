@@ -13,6 +13,7 @@ interface AuthResponse extends ApiResponse {
   user?: Record<string, unknown>;
   bankData?: Record<string, unknown>;
 }
+import { API_URL } from '../../api-config';
 
 export function iniciarVerificacion(): void {
   const verificationEmailEl = document.getElementById('verification-email');
@@ -45,7 +46,7 @@ export function iniciarVerificacion(): void {
     }
 
     try {
-      const response = await fetch('/api/verification/send', {
+      const response = await fetch(`${API_URL}/api/verification/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, email })

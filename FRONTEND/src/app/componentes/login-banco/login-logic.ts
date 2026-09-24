@@ -10,6 +10,7 @@ interface VerificationResponse {
   success: boolean;
   message?: string;
 }
+import { API_URL } from '../../api-config';
 
 export function iniciarLogin(): void {
 
@@ -92,7 +93,7 @@ export function iniciarLogin(): void {
       try {
 
         const res =
-          await fetch('/api/verification/send', {
+          await fetch(`${API_URL}/api/verification/send`, {
             method: 'POST',
 
             headers: {
