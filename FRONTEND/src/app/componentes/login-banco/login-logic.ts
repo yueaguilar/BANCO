@@ -146,7 +146,7 @@ export function iniciarLogin(): void {
         );
 
         window.location.href =
-          '/veri.html';
+          '/verificacion';
 
       } catch (err) {
 
