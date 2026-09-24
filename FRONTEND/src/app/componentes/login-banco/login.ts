@@ -1,11 +1,12 @@
-import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { API_URL } from '../../api-config';
+import { ChangeDetectorRef, Component } from '@angular/core';
 
 type Step = 'form' | 'code';
+
 
 @Component({
   selector: 'app-login-banco',
@@ -28,11 +29,11 @@ export class LoginBanco {
   code = '';
 
 private readonly apiUrl = `${API_URL}/api`;
-
-  constructor(
-    private http: HttpClient,
-    private router: Router
-  ) {}
+constructor(
+  private http: HttpClient,
+  private router: Router,
+  private cdr: ChangeDetectorRef
+) {}
 
   soloNumeros(): void {
     this.phone = this.phone.replace(/\D/g, '').slice(0, 10);
@@ -57,19 +58,22 @@ private readonly apiUrl = `${API_URL}/api`;
       email: this.email.trim(),
       phone: this.phone
     }).subscribe({
-      next: (res) => {
-        this.loading = false;
-        if (res.success) {
-          this.step = 'code';
-        } else {
-          this.errorMessage = res.message || 'No se pudo enviar el código.';
-        }
-      },
-      error: (err) => {
-        this.loading = false;
-        this.errorMessage =
-          err?.error?.message || 'Error al enviar el código de verificación.';
-      }
+    next: (res) => {
+  this.loading = false;
+  if (res.success) {
+    this.step = 'code';
+  } else {
+    this.errorMessage = res.message || 'No se pudo enviar el código.';
+  }
+  this.cdr.markForCheck();
+},
+error: (err) => {
+  this.loading = false;
+  this.errorMessage =
+    err?.error?.message || 'Error al enviar el código de verificación.';
+  this.cdr.markForCheck();
+}
+
     });
   }
 
@@ -118,16 +122,20 @@ private readonly apiUrl = `${API_URL}/api`;
               this.errorMessage = authRes.message || 'No se pudo iniciar sesión.';
             }
           },
-          error: (err) => {
-            this.loading = false;
-            this.errorMessage = err?.error?.message || 'Error al iniciar sesión.';
-          }
+         error: (err) => {
+  this.loading = false;
+  this.errorMessage =
+    err?.error?.message || 'Error al enviar el código de verificación.';
+  this.cdr.markForCheck();
+}
         });
       },
       error: (err) => {
-        this.loading = false;
-        this.errorMessage = err?.error?.message || 'Error al verificar el código.';
-      }
+  this.loading = false;
+  this.errorMessage =
+    err?.error?.message || 'Error al enviar el código de verificación.';
+  this.cdr.markForCheck();
+}
     });
   }
 
