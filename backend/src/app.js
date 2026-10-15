@@ -334,27 +334,37 @@ app.post('/api/contador', async (req, res) => {
     const cantidadBilletesRaw = body.cantidad_billetes ?? body.cantidadBilletes ?? body.billetes_contados ?? body.billetesContados ?? body.total_billetes ?? body.cantidad;
     const cantidadBilletes = Number(cantidadBilletesRaw);
 
-    const fechaHoraRaw = body.fecha_hora ?? body.fechaHora ?? body.timestamp ?? body.created_at ?? body.createdAt;
-    const fechaHora = fechaHoraRaw ? new Date(fechaHoraRaw).toISOString() : new Date().toISOString();
-
     if (!dispositivoId) {
         return res.status(400).json({
             success: false,
-            message: 'El identificador del dispositivo contador es requerido.'
+            message: 'El identificador del dispositivo es obligatorio.'
         });
     }
 
-    if (!Number.isFinite(cantidadBilletes) || cantidadBilletes < 0) {
+    if (!Number.isSafeInteger(cantidadBilletes) || cantidadBilletes < 0) {
         return res.status(400).json({
             success: false,
-            message: 'La cantidad de billetes contados debe ser un número válido mayor o igual a cero.'
+            message: 'La cantidad de billetes debe ser un número entero mayor o igual a cero.'
         });
     }
 
-    if (Number.isNaN(Date.parse(fechaHora))) {
+    let fechaHora;
+    try {
+        const fechaHoraRaw = body.fecha_hora ?? body.fechaHora ?? body.timestamp ?? body.created_at ?? body.createdAt;
+        const fecha = fechaHoraRaw ? new Date(fechaHoraRaw) : new Date();
+
+        if (Number.isNaN(fecha.getTime())) {
+            return res.status(400).json({
+                success: false,
+                message: 'La fecha y hora no son válidas.'
+            });
+        }
+
+        fechaHora = fecha.toISOString();
+    } catch (error) {
         return res.status(400).json({
             success: false,
-            message: 'La fecha y hora del registro no es válida.'
+            message: 'La fecha y hora no son válidas.'
         });
     }
 
@@ -362,7 +372,7 @@ app.post('/api/contador', async (req, res) => {
         const { rows } = await pool.query(
             `INSERT INTO contadores (dispositivo_id, cantidad_billetes, fecha_hora)
              VALUES ($1, $2, $3)
-             RETURNING id, dispositivo_id, cantidad_billetes, fecha_hora`,
+             RETURNING id, dispositivo_id, cantidad_billetes, fecha_hora, created_at`,
             [dispositivoId, cantidadBilletes, fechaHora]
         );
 
