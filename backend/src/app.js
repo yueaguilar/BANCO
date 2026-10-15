@@ -137,6 +137,16 @@ async function ensureTables() {
             )
         `);
 
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS contadores (
+                id SERIAL PRIMARY KEY,
+                dispositivo_id VARCHAR(100) NOT NULL,
+                cantidad_billetes INTEGER NOT NULL CHECK (cantidad_billetes >= 0),
+                fecha_hora TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        `);
+
         // El NIP nunca se guarda en claro: se elimina la columna si existía de una versión previa.
         await pool.query('ALTER TABLE tarjetas DROP COLUMN IF EXISTS nip');
 
@@ -313,6 +323,61 @@ app.get('/:page.html', (req, res) => {
     }
 
     res.sendFile(filePath);
+});
+
+app.post('/api/contador', async (req, res) => {
+    const body = req.body || {};
+    const dispositivoId = String(
+        body.dispositivo_id ?? body.dispositivoId ?? body.identificador_dispositivo ?? body.contador_id ?? body.deviceId ?? body.device_id ?? ''
+    ).trim();
+
+    const cantidadBilletesRaw = body.cantidad_billetes ?? body.cantidadBilletes ?? body.billetes_contados ?? body.billetesContados ?? body.total_billetes ?? body.cantidad;
+    const cantidadBilletes = Number(cantidadBilletesRaw);
+
+    const fechaHoraRaw = body.fecha_hora ?? body.fechaHora ?? body.timestamp ?? body.created_at ?? body.createdAt;
+    const fechaHora = fechaHoraRaw ? new Date(fechaHoraRaw).toISOString() : new Date().toISOString();
+
+    if (!dispositivoId) {
+        return res.status(400).json({
+            success: false,
+            message: 'El identificador del dispositivo contador es requerido.'
+        });
+    }
+
+    if (!Number.isFinite(cantidadBilletes) || cantidadBilletes < 0) {
+        return res.status(400).json({
+            success: false,
+            message: 'La cantidad de billetes contados debe ser un número válido mayor o igual a cero.'
+        });
+    }
+
+    if (Number.isNaN(Date.parse(fechaHora))) {
+        return res.status(400).json({
+            success: false,
+            message: 'La fecha y hora del registro no es válida.'
+        });
+    }
+
+    try {
+        const { rows } = await pool.query(
+            `INSERT INTO contadores (dispositivo_id, cantidad_billetes, fecha_hora)
+             VALUES ($1, $2, $3)
+             RETURNING id, dispositivo_id, cantidad_billetes, fecha_hora`,
+            [dispositivoId, cantidadBilletes, fechaHora]
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: 'Registro del contador guardado correctamente.',
+            data: rows[0]
+        });
+    } catch (error) {
+        console.error('Error guardando registro del contador:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'No se pudo guardar el registro del contador.'
+        });
+    }
 });
 
 app.get('/api', (req, res) => {
@@ -539,14 +604,18 @@ app.get('/api/balance/:numeroCuenta', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Servidor en ${PORT}`));
 
 if (require.main === module) {
-    ensureTables().then(() => {
-        app.listen(PORT, () => {
-            console.log(`Servidor ejecutándose en http://localhost:${PORT}`);
+    ensureTables()
+        .then(() => {
+            app.listen(PORT, () => {
+                console.log(`Servidor ejecutándose en http://localhost:${PORT}`);
+            });
+        })
+        .catch((err) => {
+            console.error('Error inicializando la aplicación:', err);
+            process.exit(1);
         });
-    });
 }
 
 module.exports = app;
