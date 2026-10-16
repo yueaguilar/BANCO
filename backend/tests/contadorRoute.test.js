@@ -42,6 +42,98 @@ test('POST /api/contador debe validar datos y guardar el registro', async () => 
   }
 });
 
+test('POST /api/contador debe rechazar solicitudes sin dispositivo_id', async () => {
+  const server = app.listen(0);
+  const { port } = server.address();
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/contador`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cantidad_billetes: 10 })
+    });
+
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.success, false);
+    assert.match(body.message, /identificador del dispositivo es obligatorio/i);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('POST /api/contador debe rechazar cantidades negativas', async () => {
+  const server = app.listen(0);
+  const { port } = server.address();
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/contador`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dispositivo_id: 'contador-arduino-01',
+        cantidad_billetes: -3
+      })
+    });
+
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.success, false);
+    assert.match(body.message, /número entero mayor o igual a cero/i);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('POST /api/contador debe rechazar solicitudes sin cantidad_billetes', async () => {
+  const server = app.listen(0);
+  const { port } = server.address();
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/contador`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dispositivo_id: 'contador-arduino-01'
+      })
+    });
+
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.success, false);
+    assert.match(body.message, /número entero mayor o igual a cero/i);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('POST /api/contador debe rechazar valores que no son números enteros', async () => {
+  const server = app.listen(0);
+  const { port } = server.address();
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/contador`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dispositivo_id: 'contador-arduino-01',
+        cantidad_billetes: 'abc'
+      })
+    });
+
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.success, false);
+    assert.match(body.message, /número entero mayor o igual a cero/i);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test('POST /api/contador debe rechazar cantidades decimales', async () => {
   const server = app.listen(0);
   const { port } = server.address();
@@ -88,5 +180,36 @@ test('POST /api/contador debe rechazar fechas inválidas', async () => {
     assert.match(body.message, /fecha y hora no son válidas/i);
   } finally {
     await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('POST /api/contador debe responder 500 si PostgreSQL falla', async () => {
+  pool.query = async () => {
+    throw new Error('postgres unavailable');
+  };
+
+  const server = app.listen(0);
+  const { port } = server.address();
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/contador`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dispositivo_id: 'contador-arduino-01',
+        cantidad_billetes: 10,
+        fecha_hora: '2026-10-15T10:30:00.000Z'
+      })
+    });
+
+    const body = await response.json();
+
+    assert.equal(response.status, 500);
+    assert.equal(body.success, false);
+    assert.equal(body.message, 'No se pudo guardar el registro del contador.');
+    assert.equal(body.details, undefined);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    pool.query = originalQuery;
   }
 });

@@ -527,7 +527,7 @@ app.post('/api/auth', async (req, res) => {
     }
 });
 
-app.post('/api/deposit', async (req, res) => {
+app.('/api/deposit', async (req, res) => {
     const {
         accountNumber,
         cardNumber,
