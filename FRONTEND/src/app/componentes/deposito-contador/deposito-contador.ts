@@ -32,7 +32,7 @@ import { ContadorService, RegistroContador } from '../../services/contador.servi
         </div>
 
         <label for="cuenta">Número completo de cuenta</label>
-        <input id="cuenta" name="cuenta" [(ngModel)]="numeroCuenta" inputmode="numeric" autocomplete="off" placeholder="Escribe el número de cuenta">
+        <input id="cuenta" name="cuenta" [(ngModel)]="numeroCuenta" inputmode="numeric" autocomplete="off" placeholder="Ingresa los 10 dígitos de la cuenta">
 
         <label for="denominacion">Denominación del lote</label>
         <select id="denominacion" name="denominacion" [(ngModel)]="denominacion">
@@ -43,7 +43,7 @@ import { ContadorService, RegistroContador } from '../../services/contador.servi
           <option [ngValue]="500">$500 MXN</option>
         </select>
 
-        <label for="esperados">Cantidad esperada de billetes</label>
+        <label for="esperados">Cantidad de billetes para prueba manual</label>
         <input id="esperados" name="esperados" type="number" min="1" max="10000" [(ngModel)]="cantidadEsperada" placeholder="Ej. 25">
 
         <div class="estimate">
@@ -52,7 +52,7 @@ import { ContadorService, RegistroContador } from '../../services/contador.servi
         </div>
 
         <button class="primary" type="button" [disabled]="enviando || !formularioValido" (click)="registrarPrueba()">
-          {{ enviando ? 'Registrando conteo…' : 'Registrar conteo recibido' }}
+          {{ enviando ? 'Registrando conteo…' : 'Registrar conteo de prueba' }}
         </button>
         @if (mensaje) {
           <p class="message" [class.error]="error" role="status">{{ mensaje }}</p>
@@ -70,7 +70,7 @@ import { ContadorService, RegistroContador } from '../../services/contador.servi
         }
       </section>
 
-      <p class="notice"><strong>Integración en desarrollo:</strong> este formulario registra un conteo en el backend. Todavía no confirma un depósito, no valida la cuenta y no modifica el saldo. La cantidad definitiva deberá recibirse desde los dos Arduino y validarse en Node.js antes de registrar el depósito.</p>
+      <p class="notice"><strong>Integración en desarrollo:</strong> el conteo introducido aquí es solo una prueba manual de conexión. Todavía no valida la cuenta, no recibe el conteo real de los Arduino y no modifica el saldo. La integración final deberá recibir el lote desde el dispositivo y validar cuenta, denominación y conteo en Node.js antes de registrar el depósito.</p>
     </main>
   `,
   styles: [`
