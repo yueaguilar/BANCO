@@ -1,4 +1,5 @@
 import { Component } from '@angular/core';
+import { CurrencyPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ContadorService, RegistroContador } from '../../services/contador.service';
@@ -6,7 +7,7 @@ import { ContadorService, RegistroContador } from '../../services/contador.servi
 @Component({
   selector: 'app-deposito-contador',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, CurrencyPipe, DatePipe],
   template: `
     <header class="topbar">
       <div class="topbar-inner">
