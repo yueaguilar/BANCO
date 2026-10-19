@@ -154,3 +154,5 @@
     grid-template-columns: 1fr;
   }
 }
+
+.counter-action { display:flex; align-items:center; justify-content:center; box-sizing:border-box; text-align:center; text-decoration:none; border:1px solid rgba(212,175,55,.5); background:rgba(212,175,55,.08); }

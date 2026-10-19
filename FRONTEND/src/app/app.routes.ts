@@ -11,11 +11,13 @@ import { Scan } from './componentes/scan-banco/scan';
 import { Servicios } from './componentes/servicios-banco/servicios';
 import { Transferir } from './componentes/transferencia.banco/transferir';
 import { Verificacion } from './componentes/veri-banco/veri';
+import { DepositoContador } from './componentes/deposito-contador/deposito-contador';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'login', pathMatch: 'full' },
   { path: 'login', component: LoginBanco },
   { path: 'app', component: Principal },
+  { path: 'deposito-contador', component: DepositoContador },
   { path: 'cuenta', component: Cuenta },
   { path: 'mas', component: Mas },
   { path: 'movimientos', component: Movimientos },
