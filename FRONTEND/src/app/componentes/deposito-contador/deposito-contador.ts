@@ -111,7 +111,7 @@ export class DepositoContador {
   }
 
   get formularioValido(): boolean {
-    return /^\d{6,20}$/.test(this.numeroCuenta.trim())
+    return /^\d{10}$/.test(this.numeroCuenta.trim())
       && Number.isInteger(this.cantidadEsperada)
       && Number(this.cantidadEsperada) > 0
       && Number(this.cantidadEsperada) <= 10000;
