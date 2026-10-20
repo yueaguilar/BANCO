@@ -64,7 +64,7 @@ export async function iniciarApp(): Promise<void> {
   // para evitar que la página se quede en "Cargando..."
 
   const fetchSession = async (
-    email: string
+    token: string
   ): Promise<SessionData | null> => {
 
     const controller = new AbortController();
@@ -75,12 +75,10 @@ export async function iniciarApp(): Promise<void> {
 
     try {
 
-      const response = await fetch(
-  `${API_URL}/api/session?email=${encodeURIComponent(email)}`,
-  {
-    signal: controller.signal
-  }
-);
+      const response = await fetch(`${API_URL}/api/session`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal
+      });
 
       const data = await response.json() as SessionData;
 
@@ -426,9 +424,8 @@ export async function iniciarApp(): Promise<void> {
   const local =
     readLocalSession();
 
-  const needsFetch =
-    Boolean(local.user?.email) &&
-    !local.bankData;
+  const token = localStorage.getItem('sessionToken') || '';
+  const needsFetch = Boolean(token) && !local.bankData;
 
   if (!needsFetch) {
 
@@ -440,20 +437,8 @@ export async function iniciarApp(): Promise<void> {
     return;
   }
 
-  const email = local.user?.email;
-
-  if (!email) {
-
-    render(
-      local.user,
-      local.bankData
-    );
-
-    return;
-  }
-
   const data =
-    await fetchSession(email);
+    await fetchSession(token);
 
   if (data) {
 

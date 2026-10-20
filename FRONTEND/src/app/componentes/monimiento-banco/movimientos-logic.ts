@@ -44,7 +44,11 @@ export async function iniciarApp(): Promise<void> {
 
     if (!bankData) {
       try {
-        const response = await fetch(`${API_URL}/api/session?email=${encodeURIComponent(user.email)}`);
+        const token = localStorage.getItem('sessionToken') || '';
+        if (!token) return { user: null, bankData: null };
+        const response = await fetch(`${API_URL}/api/session`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         const data: SessionResponse = await response.json();
         if (response.ok && data.success) {
           localStorage.setItem('user', JSON.stringify(data.user));

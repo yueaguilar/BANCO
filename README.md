@@ -1,202 +1,134 @@
-# 🏦 Sistema Bancario Web
+# 🏦 Banco KIKE
 
-Sistema web bancario ficticio desarrollado como proyecto académico.
-El sistema busca simular las funciones principales de una plataforma bancaria moderna, incluyendo autenticación de usuarios, administración de cuentas, protección de información y verificación mediante código SMS.
+Banco KIKE es una plataforma bancaria ficticia con arquitectura realista para un proyecto académico: Angular como frontend, Firebase Hosting para servir la app web, Node.js + Express para el backend desplegado en Render y Neon PostgreSQL como base de datos.
 
-> ⚠️ **Aviso:** Este proyecto es exclusivamente académico y utiliza datos ficticios. No está diseñado para manejar dinero real ni información bancaria real.
-
----
-
-## 📋 Descripción
-
-El proyecto consiste en una plataforma bancaria web que permite a los usuarios:
-
-* Crear y administrar una cuenta.
-* Iniciar sesión de forma segura.
-* Consultar información de su cuenta.
-* Administrar datos personales.
-* Consultar información de tarjetas.
-* Generar códigos QR para compartir información de transferencia.
-* Utilizar verificación en dos pasos mediante SMS.
-* Proteger las contraseñas mediante hashing.
-* Almacenar información en una base de datos PostgreSQL.
-* Administrar el sistema mediante diferentes niveles de acceso.
+> ⚠️ El sistema es exclusivamente académico y usa datos ficticios. No debe usarse para dinero real ni información bancaria real.
 
 ---
 
-## 🛠️ Tecnologías utilizadas
+## Arquitectura
 
-### Backend
-
-* Node.js
-* Express.js
-* PostgreSQL
-* Neon PostgreSQL
-* bcrypt
-* dotenv
-* CORS
-
-### Frontend
-
-* HTML5
-* CSS3
-* JavaScript
-
-### Servicios externos
-
-* Twilio — verificación mediante SMS.
-* QuickChart — generación de códigos QR.
+- Frontend: Angular en `FRONTEND/`
+- Hosting web: Firebase Hosting (`firebase.json`)
+- Backend API: Node.js/Express en `backend/src/app.js`
+- Base de datos: PostgreSQL en Neon (`DATABASE_URL`)
+- Contador bancario: autenticado por token de dispositivo y validado por el backend antes de aceptar el depósito
 
 ---
 
-## 📁 Estructura del proyecto
+## Estructura del repositorio
 
 ```text
 BANCO/
-│
-├── backend/
-│   │
+├── FRONTEND/                 # Angular app
 │   ├── src/
-│   │   ├── app.js
-│   │   └── database.js
-│   │
+│   ├── angular.json
+│   └── package.json
+├── backend/                  # API REST y lógica de negocio
+│   ├── src/
 │   ├── tests/
-│   │   └── generators.test.js
-│   │
-│   ├── .env
-│   ├── .gitignore
-│   ├── package.json
 │   ├── schema.sql
-│   ├── insert_test.js
-│   └── query_db.js
-│
-├── app/
-│   └── public/
-│       ├── pages/
-│       ├── css/
-│       ├── js/
-│       └── assets/
-│
-└── README.md
+│   ├── package.json
+│   └── .gitignore
+├── .github/workflows/        # CI/CD para Firebase Hosting
+├── firebase.json             # configuración del hosting
+├── README.md
+├── package.json              # raíz del proyecto (no contiene build; CI compila desde FRONTEND)
+└── .gitignore
 ```
 
 ---
 
-## 💻 Requisitos
+## Requisitos
 
-Antes de ejecutar el proyecto se necesita tener instalado:
-
-* Node.js
-* npm
-* PostgreSQL o una base de datos PostgreSQL mediante Neon
-* Git
-
-Para comprobar Node.js:
-
-```bash
-node --version
-```
-
-Para comprobar npm:
-
-```bash
-npm --version
-```
+- Node.js 18+
+- npm
+- Git
+- Acceso a una base PostgreSQL en Neon o local
 
 ---
 
-## 📦 Instalación
+## Instalación y ejecución
 
-Clonar el proyecto:
-
-```bash
-git clone <URL_DEL_REPOSITORIO>
-```
-
-Entrar al proyecto:
+### Frontend
 
 ```bash
-cd BANCO
-```
-
-Entrar al backend:
-
-```bash
-cd backend
-```
-
-Instalar las dependencias:
-
-```bash
+cd BANCO/FRONTEND
 npm install
+npm run build
+npm run start
+```
+
+### Backend
+
+```bash
+cd BANCO/backend
+npm install
+cp .env.example .env  # o crear tu propio .env
+npm run start
 ```
 
 ---
 
-## 🔐 Variables de entorno
+## Variables de entorno
 
-Crear un archivo `.env` dentro de:
-
-```text
-BANCO/backend/.env
-```
-
-Ejemplo:
+Crear un archivo `.env` en `backend/.env` con al menos:
 
 ```env
 PORT=3000
-
-DATABASE_URL=postgresql://usuario:contraseña@host/base_de_datos?sslmode=require
-
-TWILIO_ACCOUNT_SID=tu_account_sid
-TWILIO_AUTH_TOKEN=tu_auth_token
-TWILIO_PHONE_NUMBER=tu_numero_twilio
+DATABASE_URL=postgresql://usuario:password@host:5432/dbname?sslmode=require
+JWT_SECRET=una_clave_segura_de_al_menos_32_caracteres
+COUNTER_DEVICE_TOKEN=token-secreto-para-dispositivos
+COUNTER_DEVICE_IDS=CONTADOR_KIKE_01,CNT-001,contador-arduino-01
 ```
 
-### Importante
-
-El archivo `.env` contiene información privada y **no debe subirse al repositorio**.
-
-El archivo `.gitignore` debe contener:
-
-```gitignore
-node_modules/
-.env
-```
+No guardes ni subas credenciales al repositorio. El archivo `.env` debe permanecer ignorado por Git.
 
 ---
 
-## 🗄️ Base de datos
+## API principal
 
-El proyecto utiliza PostgreSQL para almacenar la información necesaria del sistema.
+Rutas relevantes:
 
-El esquema inicial se encuentra en:
-
-```text
-backend/schema.sql
-```
-
-La conexión con la base de datos se realiza mediante:
-
-```text
-backend/src/database.js
-```
-
-La variable utilizada para la conexión es:
-
-```env
-DATABASE_URL=
-```
+- `POST /api/auth` — registro e inicio de sesión
+- `GET /api/session` — sesión autenticada del usuario actual
+- `GET /api/balance/:numeroCuenta` — consulta del saldo solo para la cuenta propia
+- `POST /api/contador` — registro del contador autorizado
+- `GET /api/contador/pendientes` — conteos pendientes para validación
+- `POST /api/depositos/contador/validar` — valida cuenta, contador y denominación
+- `POST /api/depositos/contador/confirmar` — confirma deposito y actualiza saldo con movimiento
 
 ---
 
-## 🚀 Ejecutar el servidor
+## Depósito con contador
 
-Desde la carpeta `backend`:
+1. El Arduino o dispositivo envía el conteo al backend con un token autorizado.
+2. El backend valida el `dispositivo_id`, la cantidad, la antigüedad del lote y la identidad del usuario.
+3. El cliente selecciona la denominación y la cuenta de destino.
+4. El backend calcula el importe como `cantidad_billetes * denominacion`.
+5. Si la operación se confirma, se actualiza el saldo y se registra el movimiento dentro de la misma transacción PostgreSQL.
+
+---
+
+## Pruebas
 
 ```bash
-cd ~/BANCO/backend
+cd BANCO/backend
+node --test tests/contadorRoute.test.js tests/emailService.test.js
 ```
+
+También se valida el build de Angular desde:
+
+```bash
+cd BANCO/FRONTEND
+npm run build
+```
+
+---
+
+## Firebase Hosting
+
+La configuración actual apunta a la salida de Angular en `FRONTEND/dist/FRONTEND/browser`, que es el directorio válido para publicar con Firebase Hosting. El backend debe permanecer en Node.js/Render, no en Firebase Functions, y la API debe mantenerse fuera de las rutas de hosting.
 
 Ejecutar:
 

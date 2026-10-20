@@ -10,6 +10,7 @@ interface ApiResponse {
 }
 
 interface AuthResponse extends ApiResponse {
+  token?: string;
   user?: Record<string, unknown>;
   bankData?: Record<string, unknown>;
 }
@@ -116,6 +117,10 @@ export function iniciarVerificacion(): void {
           throw new Error(authData.message || 'No se pudo completar la autenticación.');
         }
 
+        if (!authData.token) {
+          throw new Error('El servidor no devolvió una sesión segura.');
+        }
+        localStorage.setItem('sessionToken', authData.token);
         localStorage.setItem('user', JSON.stringify(authData.user));
         if (authData.bankData) localStorage.setItem('bankData', JSON.stringify(authData.bankData));
         localStorage.removeItem('pendingAuth');

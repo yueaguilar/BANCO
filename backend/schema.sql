@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
     fullname TEXT,
     email TEXT UNIQUE,
     birthdate DATE,
+    phone TEXT,
     password TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -40,5 +41,47 @@ CREATE TABLE IF NOT EXISTS contadores (
     dispositivo_id VARCHAR(100) NOT NULL,
     cantidad_billetes INTEGER NOT NULL CHECK (cantidad_billetes >= 0),
     fecha_hora TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    lote_id UUID
+);
+
+ALTER TABLE contadores ADD COLUMN IF NOT EXISTS lote_id UUID;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_contadores_dispositivo_lote
+    ON contadores (dispositivo_id, lote_id)
+    WHERE lote_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS depositos (
+    id BIGSERIAL PRIMARY KEY,
+    operacion_id UUID NOT NULL UNIQUE,
+    cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE RESTRICT,
+    contador_id INTEGER NOT NULL REFERENCES contadores(id) ON DELETE RESTRICT,
+    denominacion INTEGER NOT NULL CHECK (denominacion IN (20, 50, 100, 200, 500)),
+    cantidad_billetes INTEGER NOT NULL CHECK (cantidad_billetes BETWEEN 1 AND 10000),
+    importe NUMERIC(12,2) NOT NULL CHECK (importe > 0),
+    estado VARCHAR(20) NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'confirmado', 'cancelado')),
+    saldo_resultante NUMERIC(12,2),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    confirmado_at TIMESTAMPTZ,
+    CONSTRAINT ck_deposito_importe CHECK (importe = denominacion * cantidad_billetes),
+    CONSTRAINT ck_deposito_confirmacion CHECK (
+        (estado = 'pendiente' AND confirmado_at IS NULL AND saldo_resultante IS NULL)
+        OR (estado = 'confirmado' AND confirmado_at IS NOT NULL AND saldo_resultante IS NOT NULL)
+        OR (estado = 'cancelado' AND confirmado_at IS NULL AND saldo_resultante IS NULL)
+    )
+);
+
+ALTER TABLE depositos DROP CONSTRAINT IF EXISTS depositos_contador_id_key;
+ALTER TABLE depositos DROP CONSTRAINT IF EXISTS depositos_contador_id_key;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_depositos_contador_activo
+    ON depositos (contador_id)
+    WHERE estado <> 'cancelado';
+
+CREATE TABLE IF NOT EXISTS movimientos (
+    id BIGSERIAL PRIMARY KEY,
+    cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE RESTRICT,
+    tipo VARCHAR(40) NOT NULL,
+    monto NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+    descripcion TEXT NOT NULL,
+    referencia_id UUID NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

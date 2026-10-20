@@ -7,6 +7,13 @@ import { ChangeDetectorRef, Component } from '@angular/core';
 
 type Step = 'form' | 'code';
 
+interface AuthResponse {
+  success: boolean;
+  message?: string;
+  token?: string;
+  user?: Record<string, unknown>;
+  bankData?: Record<string, unknown>;
+}
 
 @Component({
   selector: 'app-login-banco',
@@ -93,7 +100,7 @@ error: (err) => {
           return;
         }
 
-        this.http.post<any>(`${this.apiUrl}/auth`, {
+        this.http.post<AuthResponse>(`${this.apiUrl}/auth`, {
           email: this.email.trim(),
           fullname: this.fullname.trim(),
           birthdate: this.birthdate,
@@ -104,6 +111,11 @@ error: (err) => {
             this.loading = false;
 
             if (authRes.success) {
+              if (!authRes.token) {
+                this.errorMessage = 'El servidor no devolvió una sesión segura.';
+                return;
+              }
+              localStorage.setItem('sessionToken', authRes.token);
               // Guardamos la sesión para que la pantalla /app la pueda leer
               if (authRes.user) {
                 localStorage.setItem('user', JSON.stringify(authRes.user));

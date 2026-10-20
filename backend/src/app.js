@@ -26,9 +26,20 @@ const {
     isEmailVerified
 } = require('./services/verificationService');
 const { enviarCorreoVerificacion } = require('./services/emailService');
+const jwt = require('jsonwebtoken');
+const counterDepositsRouter = require('./routes/counterDeposits');
+const authenticateUser = require('./middleware/authenticateUser');
 
 const app = express();
 const userNips = new Map();
+
+if (!process.env.JWT_SECRET) {
+    process.env.JWT_SECRET = 'dev-jwt-secret-change-me-for-local-testing';
+}
+
+if (!process.env.COUNTER_DEVICE_TOKEN) {
+    process.env.COUNTER_DEVICE_TOKEN = 'dev-counter-token';
+}
 
 app.use(cors());
 app.use(express.json());
@@ -143,6 +154,56 @@ async function ensureTables() {
                 dispositivo_id VARCHAR(100) NOT NULL,
                 cantidad_billetes INTEGER NOT NULL CHECK (cantidad_billetes >= 0),
                 fecha_hora TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                lote_id UUID
+            )
+        `);
+
+        await pool.query('ALTER TABLE contadores ADD COLUMN IF NOT EXISTS lote_id UUID');
+        await pool.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_contadores_dispositivo_lote
+            ON contadores (dispositivo_id, lote_id)
+            WHERE lote_id IS NOT NULL
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS depositos (
+                id BIGSERIAL PRIMARY KEY,
+                operacion_id UUID NOT NULL UNIQUE,
+                cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE RESTRICT,
+                contador_id INTEGER NOT NULL REFERENCES contadores(id) ON DELETE RESTRICT,
+                denominacion INTEGER NOT NULL CHECK (denominacion IN (20, 50, 100, 200, 500)),
+                cantidad_billetes INTEGER NOT NULL CHECK (cantidad_billetes BETWEEN 1 AND 10000),
+                importe NUMERIC(12,2) NOT NULL CHECK (importe > 0),
+                estado VARCHAR(20) NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'confirmado', 'cancelado')),
+                saldo_resultante NUMERIC(12,2),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                confirmado_at TIMESTAMPTZ,
+                CONSTRAINT ck_deposito_importe
+                    CHECK (importe = denominacion * cantidad_billetes),
+                CONSTRAINT ck_deposito_confirmacion
+                    CHECK (
+                        (estado = 'pendiente' AND confirmado_at IS NULL AND saldo_resultante IS NULL)
+                        OR (estado = 'confirmado' AND confirmado_at IS NOT NULL AND saldo_resultante IS NOT NULL)
+                        OR (estado = 'cancelado' AND confirmado_at IS NULL AND saldo_resultante IS NULL)
+                    )
+            )
+        `);
+        await pool.query('ALTER TABLE depositos DROP CONSTRAINT IF EXISTS depositos_contador_id_key');
+        await pool.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_depositos_contador_activo
+            ON depositos (contador_id)
+            WHERE estado <> 'cancelado'
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS movimientos (
+                id BIGSERIAL PRIMARY KEY,
+                cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE RESTRICT,
+                tipo VARCHAR(40) NOT NULL,
+                monto NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+                descripcion TEXT NOT NULL,
+                referencia_id UUID NOT NULL UNIQUE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         `);
@@ -158,13 +219,14 @@ async function ensureTables() {
         console.log('Tablas verificadas');
     } catch (err) {
         console.error('Error ensuring tables:', err);
+        throw err;
     }
 }
 
 async function createBankAccountForUser(userId) {
     const numeroCuenta = await generateAccountNumber();
     const numeroTarjeta = await generateCardNumber();
-    const { nip, nipHash } = await generateSecureNip();
+    const { nipHash } = await generateSecureNip();
     const expiracion = generateExpirationDate();
 
     const client = await pool.connect();
@@ -185,10 +247,6 @@ async function createBankAccountForUser(userId) {
 
         await client.query('COMMIT');
 
-        userNips.set(Number(userId), String(nip));
-
-        const currentCvv = generateCvv(numeroTarjeta, Number(expiracion.month), Number(expiracion.year), 0);
-
         const tarjeta = tarjetaRes.rows[0];
 
         console.log('Cuenta y tarjeta creadas:', { cuentaId, numeroCuenta, tarjetaId: tarjeta.id });
@@ -196,10 +254,8 @@ async function createBankAccountForUser(userId) {
         return {
             numeroCuenta: String(cuentaRes.rows[0].numero_cuenta),
             numeroTarjeta: String(tarjeta.numero_tarjeta),
-            nip: String(nip),
             mesExpiracion: Number(tarjeta.mes_expiracion),
-            anioExpiracion: Number(tarjeta.anio_expiracion),
-            cvv: currentCvv
+            anioExpiracion: Number(tarjeta.anio_expiracion)
         };
     } catch (err) {
         await client.query('ROLLBACK');
@@ -241,33 +297,20 @@ async function getBankDataForUser(userId) {
         return null;
     }
 
-    // El NIP solo existe en claro en memoria, justo después de haberse generado.
-    // Una vez hasheado no es recuperable, igual que la contraseña: por diseño.
-    const visibleNip = userNips.get(Number(userId)) || null;
-
-    const cvv = generateCvv(
-        String(cuentaInfo.numero_tarjeta),
-        Number(cuentaInfo.mes_expiracion),
-        Number(cuentaInfo.anio_expiracion),
-        0
-    );
-
     return {
         cuentaId: cuentaInfo.cuenta_id,
         numeroCuenta: cuentaInfo.numero_cuenta,
         saldo: Number(cuentaInfo.saldo),
         numeroTarjeta: cuentaInfo.numero_tarjeta,
         mesExpiracion: Number(cuentaInfo.mes_expiracion),
-        anioExpiracion: Number(cuentaInfo.anio_expiracion),
-        nip: visibleNip,
-        cvv
+        anioExpiracion: Number(cuentaInfo.anio_expiracion)
     };
 }
 
-async function getSessionDataByEmail(email) {
+async function getSessionDataForUser(userId) {
     const { rows } = await pool.query(
-        'SELECT id, fullname, email FROM users WHERE email = $1',
-        [email]
+        'SELECT id, fullname, email FROM users WHERE id = $1',
+        [userId]
     );
 
     if (rows.length === 0) {
@@ -325,84 +368,15 @@ app.get('/:page.html', (req, res) => {
     res.sendFile(filePath);
 });
 
-app.post('/api/contador', async (req, res) => {
-    const body = req.body || {};
-    const dispositivoId = String(
-        body.dispositivo_id ?? body.dispositivoId ?? body.identificador_dispositivo ?? body.contador_id ?? body.deviceId ?? body.device_id ?? ''
-    ).trim();
-
-    const cantidadBilletesRaw = body.cantidad_billetes ?? body.cantidadBilletes ?? body.billetes_contados ?? body.billetesContados ?? body.total_billetes ?? body.cantidad;
-    const cantidadBilletes = Number(cantidadBilletesRaw);
-
-    if (!dispositivoId) {
-        return res.status(400).json({
-            success: false,
-            message: 'El identificador del dispositivo es obligatorio.'
-        });
-    }
-
-    if (!Number.isSafeInteger(cantidadBilletes) || cantidadBilletes < 0) {
-        return res.status(400).json({
-            success: false,
-            message: 'La cantidad de billetes debe ser un número entero mayor o igual a cero.'
-        });
-    }
-
-    let fechaHora;
-    try {
-        const fechaHoraRaw = body.fecha_hora ?? body.fechaHora ?? body.timestamp ?? body.created_at ?? body.createdAt;
-        const fecha = fechaHoraRaw ? new Date(fechaHoraRaw) : new Date();
-
-        if (Number.isNaN(fecha.getTime())) {
-            return res.status(400).json({
-                success: false,
-                message: 'La fecha y hora no son válidas.'
-            });
-        }
-
-        fechaHora = fecha.toISOString();
-    } catch (error) {
-        return res.status(400).json({
-            success: false,
-            message: 'La fecha y hora no son válidas.'
-        });
-    }
-
-    try {
-        const { rows } = await pool.query(
-            `INSERT INTO contadores (dispositivo_id, cantidad_billetes, fecha_hora)
-             VALUES ($1, $2, $3)
-             RETURNING id, dispositivo_id, cantidad_billetes, fecha_hora, created_at`,
-            [dispositivoId, cantidadBilletes, fechaHora]
-        );
-
-        return res.status(200).json({
-            success: true,
-            message: 'Registro del contador guardado correctamente.',
-            data: rows[0]
-        });
-    } catch (error) {
-        console.error('Error guardando registro del contador:', error);
-        return res.status(500).json({
-            success: false,
-            message: 'No se pudo guardar el registro del contador.'
-        });
-    }
-});
+app.use(counterDepositsRouter);
 
 app.get('/api', (req, res) => {
     res.json({ mensaje: 'API del Banco funcionando' });
 });
 
-app.get('/api/session', async (req, res) => {
-    const { email } = req.query;
-
-    if (!email) {
-        return res.status(400).json({ success: false, message: 'Email requerido' });
-    }
-
+app.get('/api/session', authenticateUser, async (req, res) => {
     try {
-        const session = await getSessionDataByEmail(email);
+        const session = await getSessionDataForUser(req.user.id);
         if (!session) {
             return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
         }
@@ -483,6 +457,10 @@ app.post('/api/auth', async (req, res) => {
         return res.status(401).json({ success: false, message: 'Debes verificar el código enviado al correo electrónico.' });
     }
 
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+        return res.status(503).json({ success: false, message: 'La autenticación no está configurada correctamente.' });
+    }
+
     try {
         const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
 
@@ -496,7 +474,13 @@ app.post('/api/auth', async (req, res) => {
 
                 const bankData = await getBankDataForUser(user.id);
 
-                return res.json({ success: true, message: 'Login exitoso', user: { id: user.id, fullname: user.fullname, email: user.email }, bankData });
+                const token = jwt.sign({}, process.env.JWT_SECRET, {
+                    subject: String(user.id),
+                    issuer: 'banco-kike-api',
+                    audience: 'banco-kike-web',
+                    expiresIn: '1h'
+                });
+                return res.json({ success: true, message: 'Login exitoso', token, user: { id: user.id, fullname: user.fullname, email: user.email }, bankData });
             }
 
             return res.status(401).json({ success: false, message: 'Contraseña incorrecta' });
@@ -509,11 +493,18 @@ app.post('/api/auth', async (req, res) => {
         );
 
         const bankData = await createBankAccountForUser(userInsert.rows[0].id);
+        const token = jwt.sign({}, process.env.JWT_SECRET, {
+            subject: String(userInsert.rows[0].id),
+            issuer: 'banco-kike-api',
+            audience: 'banco-kike-web',
+            expiresIn: '1h'
+        });
         console.log('Usuario registrado:', { userId: userInsert.rows[0].id, email: normalizedEmail, phone: normalizedPhone });
 
         return res.json({
             success: true,
             message: 'Usuario registrado',
+            token,
             user: {
                 id: userInsert.rows[0].id,
                 fullname: fullname || null,
@@ -591,15 +582,22 @@ app.post('/api/deposit', async (req, res) => {
     }
 });
 
-app.get('/api/balance/:numeroCuenta', async (req, res) => {
+app.get('/api/balance/:numeroCuenta', authenticateUser, async (req, res) => {
+    const { numeroCuenta } = req.params;
+    const cuenta = String(numeroCuenta || '').trim();
+
+    if (!/^\d{10}$/.test(cuenta)) {
+        return res.status(400).json({ success: false, message: 'El número de cuenta debe tener 10 dígitos.' });
+    }
+
     try {
         const { rows } = await pool.query(
-            'SELECT numero_cuenta, saldo FROM cuentas WHERE numero_cuenta = $1',
-            [req.params.numeroCuenta]
+            'SELECT c.id, c.numero_cuenta, c.saldo FROM cuentas c WHERE c.numero_cuenta = $1 AND c.usuario_id = $2',
+            [cuenta, req.user.id]
         );
 
         if (rows.length === 0) {
-            return res.status(404).json({ success: false, message: 'Cuenta no encontrada' });
+            return res.status(404).json({ success: false, message: 'La cuenta no existe o no pertenece al usuario autenticado.' });
         }
 
         return res.json({
