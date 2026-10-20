@@ -17,14 +17,30 @@ export interface DepositoContador {
   denominacion: number;
   cantidad_billetes: number;
   importe: number;
-  estado: 'pendiente' | 'confirmado';
+  estado: 'pendiente' | 'confirmado' | 'cancelado';
   created_at?: string;
+  saldo_resultante?: number | string;
+}
+
+export interface MovimientoBancario {
+  id: number;
+  tipo: string;
+  monto: number;
+  descripcion: string;
+  created_at: string;
 }
 
 interface ApiResponse<T> {
   success: boolean;
   message?: string;
   data?: T;
+}
+
+export class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
 }
 
 @Injectable({ providedIn: 'root' })
@@ -76,6 +92,23 @@ export class ContadorService {
     );
   }
 
+  async obtenerMovimientos(token: string): Promise<MovimientoBancario[]> {
+    const data = await this.request<ApiResponse<MovimientoBancario[]>>(
+      '/api/movimientos',
+      token
+    );
+    return data.data ?? [];
+  }
+
+  async obtenerDeposito(token: string, operacionId: string): Promise<DepositoContador> {
+    const data = await this.request<ApiResponse<DepositoContador>>(
+      `/api/depositos/contador/${encodeURIComponent(operacionId)}`,
+      token
+    );
+    if (!data.data) throw new Error('El servidor no devolvió el estado del depósito.');
+    return data.data;
+  }
+
   async comprobarBackend(): Promise<boolean> {
     const response = await fetch(`${API_URL}/api`);
     return response.ok;
@@ -96,9 +129,14 @@ export class ContadorService {
       ...(body ? { body: JSON.stringify(body) } : {})
     });
 
-    const data = await response.json() as T & ApiResponse<unknown>;
+    let data: T & ApiResponse<unknown>;
+    try {
+      data = await response.json() as T & ApiResponse<unknown>;
+    } catch {
+      throw new Error('El servidor devolvió una respuesta no válida.');
+    }
     if (!response.ok || !data.success) {
-      throw new Error(data.message || 'No se pudo completar la operación.');
+      throw new ApiRequestError(data.message || 'No se pudo completar la operación.', response.status);
     }
     return data;
   }

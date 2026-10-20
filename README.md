@@ -411,6 +411,73 @@ Las funcionalidades de autenticación, transferencias, SMS y almacenamiento de d
 
 ---
 
+## Despliegue y depósito con contador
+
+La aplicación Angular vive en `FRONTEND/` y Firebase Hosting publica `FRONTEND/dist/FRONTEND/browser`. Los workflows de Firebase instalan y compilan desde `FRONTEND/`. El backend es una API Node.js/Express en `backend/`; se ejecuta por separado en Render y usa Neon PostgreSQL mediante `DATABASE_URL`. El backend no sirve los archivos Angular.
+
+Configura estas variables como secretos del entorno de Render (y nunca en el código):
+
+```env
+DATABASE_URL=...
+JWT_SECRET=...                 # mínimo 32 caracteres aleatorios
+COUNTER_DEVICE_TOKEN=...       # mínimo 32 caracteres aleatorios
+COUNTER_DEVICE_IDS=CONTADOR_01 # IDs autorizados separados por coma
+```
+
+Render debe iniciar desde `backend/` con `npm start`. Para desarrollo local, crea `backend/.env` con las mismas variables y usa:
+
+```bash
+cd backend
+npm ci
+npm start
+npm test
+```
+
+En Ubuntu, inicia el intermediario con Node.js:
+
+```bash
+BACKEND_URL=https://<servicio-render> \
+BRIDGE_INGEST_TOKEN=<secreto-local-de-32-caracteres-o-mas> \
+COUNTER_DEVICE_TOKEN=<mismo-secreto-configurado-en-render> \
+COUNTER_DEVICE_IDS=CONTADOR_01 \
+node ubuntu-bridge/bridge.js
+```
+
+Configura también `COUNTER_QUEUE_DIR` en un disco persistente y limita el puerto local del bridge a la red aislada del contador. El token local protege la recepción desde el Arduino; el bridge solo envía al backend por HTTPS. El directorio de cola conserva el lote ante una caída de Internet y lo elimina tras una respuesta 2xx.
+
+El contador solo acepta un lote finalizado en `POST /api/contador`, con el encabezado `x-device-token` y este cuerpo:
+
+```json
+{
+  "dispositivo_id": "CONTADOR_01",
+  "lote_id": "6ba7b810-9dad-41d1-80b4-00c04fd430c8",
+  "cantidad_billetes": 20,
+  "fecha_hora": "2026-10-20T12:00:00.000Z",
+  "estado": "completado"
+}
+```
+
+El intermediario Ubuntu debe generar un UUID por lote y conservarlo junto con el contenido hasta recibir confirmación del backend. Los reintentos deben reenviar el mismo UUID y cantidad; el backend devuelve el registro original en lugar de crear otro. La antigüedad se calcula con la hora de recepción del servidor, no con la hora del dispositivo.
+
+El endpoint local del bridge es `POST http://<ubuntu-en-la-red-del-contador>:8080/batches` y requiere `x-bridge-token`. Para el enlace serial, Arduino Uno 1 debe emitir `COUNT;<lote_id>;<cantidad>\n` y después `END;<lote_id>\n`; Arduino Uno 2 solo envía el JSON final cuando ambos mensajes coinciden y contesta `ACK;<lote_id>\n` al recibirlos. El bridge devuelve HTTP `202` una vez que el lote se guardó en la cola local, no cuando ya llegó a Render.
+
+El usuario autenticado selecciona un conteo disponible y confirma el depósito. Endpoints de este flujo:
+
+- `GET /api/contador/pendientes`
+- `POST /api/depositos/contador/validar`
+- `POST /api/depositos/contador/confirmar`
+- `POST /api/depositos/contador/cancelar`
+- `GET /api/depositos/contador/:id`
+- `GET /api/movimientos`
+
+La validación del depósito exige que la cuenta pertenezca al usuario. El servidor calcula el importe. Confirmación actualiza saldo, depósito y movimiento en una única transacción; repetir la misma confirmación devuelve el resultado existente. Las solicitudes de depósito se guardan localmente en el navegador para reintentar con el mismo ID de operación tras perder conexión.
+
+El repositorio incluye el bridge Ubuntu y pruebas de su cola/reintentos, pero aún no contiene firmware de Arduino. La implementación serial entre placas y las pruebas físicas de sensores/servos/W5100 requieren el hardware y su asignación real de pines; no se debe conectar el W5100 directamente a Render con HTTP sin cifrar.
+
+Firebase Hosting reescribe rutas de la SPA a `index.html`; el frontend usa la URL HTTPS de Render para las llamadas API. No hay un proxy de API de Firebase ni una Firebase Function para este backend.
+
+---
+
 ## 📄 Licencia
 
 Este proyecto es de uso académico y educativo.

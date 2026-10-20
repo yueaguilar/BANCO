@@ -14,11 +14,7 @@ function getAuthorizedDeviceIds() {
         .map((deviceId) => deviceId.trim())
         .filter(Boolean);
 
-    if (configured.length > 0) {
-        return configured;
-    }
-
-    return ['CONTADOR_KIKE_01', 'CNT-001', 'contador-arduino-01'];
+    return [...new Set(configured)];
 }
 
 function validUuid(value) {
@@ -27,21 +23,17 @@ function validUuid(value) {
 }
 
 function authenticateDevice(req, res, next) {
-    const configuredToken = process.env.COUNTER_DEVICE_TOKEN || 'dev-counter-token';
+    const configuredToken = process.env.COUNTER_DEVICE_TOKEN || '';
     const configuredDevices = getAuthorizedDeviceIds();
     const providedToken = req.get('x-device-token') || '';
-    const expected = Buffer.from(configuredToken || '');
+    const expected = Buffer.from(configuredToken);
     const provided = Buffer.from(providedToken);
 
-    if (!configuredDevices.length) {
+    if (configuredToken.length < 32 || configuredDevices.length === 0) {
         return res.status(503).json({ success: false, message: 'La autenticación del contador no está configurada.' });
     }
 
-    if (providedToken && (expected.length !== provided.length || !crypto.timingSafeEqual(expected, provided))) {
-        return res.status(401).json({ success: false, message: 'El dispositivo no está autorizado.' });
-    }
-
-    if (!providedToken && process.env.NODE_ENV === 'production') {
+    if (expected.length !== provided.length || !crypto.timingSafeEqual(expected, provided)) {
         return res.status(401).json({ success: false, message: 'El dispositivo no está autorizado.' });
     }
 
@@ -56,37 +48,45 @@ function respondWithDatabaseError(res, error, message) {
 
 router.post('/api/contador', authenticateDevice, async (req, res) => {
     const body = req.body || {};
-    const dispositivoId = String(body.dispositivo_id ?? body.dispositivoId ?? body.identificador_dispositivo ?? body.contador_id ?? body.deviceId ?? body.device_id ?? '').trim();
-    const cantidadBilletesRaw = body.cantidad_billetes ?? body.cantidadBilletes ?? body.billetes_contados ?? body.billetesContados ?? body.total_billetes ?? body.cantidad;
-    const cantidadBilletes = Number(cantidadBilletesRaw);
-    const loteId = body.lote_id ?? body.loteId ?? crypto.randomUUID();
+    const dispositivoId = typeof body.dispositivo_id === 'string' ? body.dispositivo_id.trim() : '';
+    const cantidadBilletes = body.cantidad_billetes;
+    const loteId = body.lote_id;
     const deviceIds = req.authorizedDeviceIds;
 
-    if (!dispositivoId) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(dispositivoId)) {
         return res.status(400).json({
             success: false,
-            message: 'El identificador del dispositivo es obligatorio.'
+            message: 'El identificador del dispositivo no es válido.'
         });
     }
 
-    if (!deviceIds.includes(dispositivoId) && process.env.NODE_ENV === 'production') {
-        return res.status(400).json({ success: false, message: 'El identificador del dispositivo no está permitido.' });
+    if (!deviceIds.includes(dispositivoId)) {
+        return res.status(403).json({ success: false, message: 'El identificador del dispositivo no está permitido.' });
     }
 
-    if (!Number.isSafeInteger(cantidadBilletes) || cantidadBilletes < 0) {
+    if (!Number.isSafeInteger(cantidadBilletes) || cantidadBilletes < 1 || cantidadBilletes > MAXIMO_BILLETES) {
         return res.status(400).json({
             success: false,
-            message: 'La cantidad de billetes debe ser un número entero mayor o igual a cero.'
+            message: `La cantidad de billetes debe ser un entero entre 1 y ${MAXIMO_BILLETES}.`
         });
     }
 
-    const fechaHoraRaw = body.fecha_hora ?? body.fechaHora ?? body.timestamp ?? body.created_at ?? body.createdAt;
-    const fechaHora = fechaHoraRaw ? new Date(fechaHoraRaw) : new Date();
-    if (Number.isNaN(fechaHora.getTime())) {
+    if (!validUuid(loteId)) {
+        return res.status(400).json({ success: false, message: 'Cada lote debe incluir un lote_id UUID estable.' });
+    }
+    if (body.estado !== 'completado') {
+        return res.status(400).json({ success: false, message: 'Solo se aceptan lotes con conteo completado.' });
+    }
+
+    const fechaHora = new Date(body.fecha_hora);
+    if (typeof body.fecha_hora !== 'string' || Number.isNaN(fechaHora.getTime())) {
         return res.status(400).json({
             success: false,
             message: 'La fecha y hora no son válidas.'
         });
+    }
+    if (fechaHora.getTime() > Date.now() + 5 * 60 * 1000) {
+        return res.status(400).json({ success: false, message: 'La fecha del conteo no puede estar en el futuro.' });
     }
 
     try {
@@ -99,7 +99,21 @@ router.post('/api/contador', authenticateDevice, async (req, res) => {
         );
 
         if (rows.length === 0) {
-            return res.status(409).json({ success: false, message: 'Este lote ya fue registrado.' });
+            const existing = await pool.query(
+                `SELECT id, dispositivo_id, cantidad_billetes, fecha_hora, created_at, lote_id
+                 FROM contadores
+                 WHERE dispositivo_id = $1 AND lote_id = $2`,
+                [dispositivoId, loteId]
+            );
+            if (existing.rows.length === 0 || Number(existing.rows[0].cantidad_billetes) !== cantidadBilletes) {
+                return res.status(409).json({ success: false, message: 'El lote ya existe con datos diferentes.' });
+            }
+            return res.status(200).json({
+                success: true,
+                message: 'Este lote ya había sido recibido.',
+                data: existing.rows[0],
+                duplicate: true
+            });
         }
 
         return res.status(200).json({
@@ -112,7 +126,11 @@ router.post('/api/contador', authenticateDevice, async (req, res) => {
     }
 });
 
-router.get('/api/contador/pendientes', authenticateUser, async (_req, res) => {
+router.get('/api/contador/pendientes', authenticateUser, async (req, res) => {
+    const deviceIds = getAuthorizedDeviceIds();
+    if (deviceIds.length === 0) {
+        return res.status(503).json({ success: false, message: 'La lista de dispositivos autorizados no está configurada.' });
+    }
     try {
         const { rows } = await pool.query(
             `SELECT c.id, c.dispositivo_id, c.cantidad_billetes, c.fecha_hora, c.created_at, c.lote_id
@@ -123,7 +141,7 @@ router.get('/api/contador/pendientes', authenticateUser, async (_req, res) => {
                AND NOT EXISTS (SELECT 1 FROM depositos d WHERE d.contador_id = c.id AND d.estado <> 'cancelado')
              ORDER BY c.created_at DESC
              LIMIT 30`,
-            [getAuthorizedDeviceIds()]
+            [deviceIds]
         );
         return res.json({ success: true, data: rows });
     } catch (error) {
@@ -191,7 +209,8 @@ router.post('/api/depositos/contador/validar', authenticateUser, async (req, res
         if (!Number.isSafeInteger(cantidadBilletes) || cantidadBilletes < 1 || cantidadBilletes > MAXIMO_BILLETES) {
             return res.status(400).json({ success: false, message: 'La cantidad del conteo está fuera de los límites permitidos.' });
         }
-        if (Date.now() - new Date(count.created_at).getTime() > MAXIMA_ANTIGUEDAD_CONTEO_MS) {
+        const receivedAt = new Date(count.created_at).getTime();
+        if (!Number.isFinite(receivedAt) || Date.now() - receivedAt > MAXIMA_ANTIGUEDAD_CONTEO_MS) {
             return res.status(410).json({ success: false, message: 'El conteo expiró; solicita una nueva medición al dispositivo.' });
         }
 
@@ -254,7 +273,8 @@ router.post('/api/depositos/contador/confirmar', authenticateUser, async (req, r
             await client.query('ROLLBACK');
             return res.status(409).json({ success: false, message: 'La operación no se encuentra pendiente de confirmación.' });
         }
-        if (Date.now() - new Date(deposit.conteo_creado).getTime() > MAXIMA_ANTIGUEDAD_CONTEO_MS) {
+        const receivedAt = new Date(deposit.conteo_creado).getTime();
+        if (!Number.isFinite(receivedAt) || Date.now() - receivedAt > MAXIMA_ANTIGUEDAD_CONTEO_MS) {
             await client.query('ROLLBACK');
             return res.status(410).json({ success: false, message: 'El conteo expiró; valida un nuevo conteo antes de confirmar.' });
         }
@@ -348,7 +368,7 @@ router.get('/api/depositos/contador/:id', authenticateUser, async (req, res) => 
     try {
         const { rows } = await pool.query(
             `SELECT d.operacion_id, c.numero_cuenta, d.contador_id, d.denominacion, d.cantidad_billetes,
-                    d.importe, d.estado, d.created_at, d.confirmado_at
+                    d.importe, d.estado, d.saldo_resultante, d.created_at, d.confirmado_at
              FROM depositos d
              JOIN cuentas c ON c.id = d.cuenta_id
              WHERE d.operacion_id = $1 AND c.usuario_id = $2`,

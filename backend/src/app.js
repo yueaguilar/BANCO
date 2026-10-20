@@ -2,8 +2,6 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
 const pool = require('./database');
 const bcrypt = require('bcrypt');
 const generateAccountNumber = require('./services/accountGenerator');
@@ -31,76 +29,15 @@ const counterDepositsRouter = require('./routes/counterDeposits');
 const authenticateUser = require('./middleware/authenticateUser');
 
 const app = express();
-const userNips = new Map();
-
-if (!process.env.JWT_SECRET) {
-    process.env.JWT_SECRET = 'dev-jwt-secret-change-me-for-local-testing';
-}
-
-if (!process.env.COUNTER_DEVICE_TOKEN) {
-    process.env.COUNTER_DEVICE_TOKEN = 'dev-counter-token';
-}
 
 app.use(cors());
-app.use(express.json());
-
-// Determinar la carpeta pública del frontend. La estructura actual coloca los HTML
-// en `FRONTEND/src/app/componentes/...` por lo que apuntamos al root `FRONTEND/src/app`.
-const candidatePaths = [
-    path.join(__dirname, '../../FRONTEND/src/app'),
-    path.join(__dirname, '../../FRONTEND/src'),
-    path.join(__dirname, '../../FRONTEND'),
-    path.join(__dirname, '../../app/public')
-];
-
-const publicPath = candidatePaths.find((p) => fs.existsSync(p));
-
-if (!publicPath) {
-    throw new Error(`No se encontró la carpeta pública del frontend. Revisar rutas: ${candidatePaths.join(', ')}`);
-}
-
-// Busca recursivamente un archivo HTML que coincida con `page`. Devuelve ruta absoluta o null.
-function findHtmlForPage(page) {
-    const target = `${page}.html`;
-
-    function search(dir) {
-        const items = fs.readdirSync(dir, { withFileTypes: true });
-        for (const it of items) {
-            const full = path.join(dir, it.name);
-            if (it.isFile() && it.name.toLowerCase() === target.toLowerCase()) {
-                return full;
-            }
-            if (it.isDirectory()) {
-                try {
-                    const found = search(full);
-                    if (found) return found;
-                } catch (err) {
-                    // ignorar permisos u otros errores puntuales
-                }
-            }
-        }
-        return null;
-    }
-
-    // Primero buscar en la raíz pública y luego dentro de `componentes` si existe.
-    const foundRoot = search(publicPath);
-    if (foundRoot) return foundRoot;
-
-    const componentesPath = path.join(publicPath, 'componentes');
-    if (fs.existsSync(componentesPath)) {
-        return search(componentesPath);
-    }
-
-    return null;
-}
+app.use(express.json({ limit: '16kb' }));
 
 async function generateSecureNip() {
     const nip = generateNip();
     const nipHash = await hashNip(nip);
     return { nip, nipHash };
 }
-
-app.use(express.static(publicPath));
 
 async function ensureTables() {
     try {
@@ -123,7 +60,7 @@ async function ensureTables() {
                 id SERIAL PRIMARY KEY,
                 usuario_id INTEGER NOT NULL,
                 numero_cuenta VARCHAR(10) UNIQUE NOT NULL,
-                saldo NUMERIC(12,2) DEFAULT 0.00,
+                saldo NUMERIC(12,2) NOT NULL DEFAULT 0.00,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT fk_usuario
                     FOREIGN KEY (usuario_id)
@@ -155,15 +92,22 @@ async function ensureTables() {
                 cantidad_billetes INTEGER NOT NULL CHECK (cantidad_billetes >= 0),
                 fecha_hora TIMESTAMPTZ NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                lote_id UUID
+                lote_id UUID NOT NULL
             )
         `);
 
         await pool.query('ALTER TABLE contadores ADD COLUMN IF NOT EXISTS lote_id UUID');
+        await pool.query('UPDATE contadores SET lote_id = gen_random_uuid() WHERE lote_id IS NULL');
+        await pool.query('ALTER TABLE contadores ALTER COLUMN lote_id SET NOT NULL');
         await pool.query(`
             CREATE UNIQUE INDEX IF NOT EXISTS uq_contadores_dispositivo_lote
             ON contadores (dispositivo_id, lote_id)
             WHERE lote_id IS NOT NULL
+        `);
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_contadores_pendientes
+            ON contadores (dispositivo_id, created_at DESC)
+            WHERE cantidad_billetes > 0
         `);
 
         await pool.query(`
@@ -195,6 +139,10 @@ async function ensureTables() {
             ON depositos (contador_id)
             WHERE estado <> 'cancelado'
         `);
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_depositos_cuenta_created_at
+            ON depositos (cuenta_id, created_at DESC)
+        `);
 
         await pool.query(`
             CREATE TABLE IF NOT EXISTS movimientos (
@@ -206,6 +154,10 @@ async function ensureTables() {
                 referencia_id UUID NOT NULL UNIQUE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
+        `);
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_movimientos_cuenta_created_at
+            ON movimientos (cuenta_id, created_at DESC)
         `);
 
         // El NIP nunca se guarda en claro: se elimina la columna si existía de una versión previa.
@@ -266,21 +218,6 @@ async function createBankAccountForUser(userId) {
     }
 }
 
-const validPages = [
-    'login',
-    'veri',
-    'app',
-    'cuenta',
-    'movimientos',
-    'mas',
-    'pago',
-    'recarga',
-    'srevicios',
-    'transferir',
-    'qr',
-    'scan'
-];
-
 async function getBankDataForUser(userId) {
     const cuentasRes = await pool.query(
         `SELECT c.id as cuenta_id, c.numero_cuenta, c.saldo, t.id as tarjeta_id, t.numero_tarjeta, t.mes_expiracion, t.anio_expiracion
@@ -330,45 +267,11 @@ async function getSessionDataForUser(userId) {
     };
 }
 
-app.get('/', (req, res) => {
-    const file = findHtmlForPage('login') || findHtmlForPage('app') || path.join(publicPath, 'index.html');
-    if (!file || !fs.existsSync(file)) return res.status(404).send('Página de inicio no encontrada');
-    res.sendFile(file);
-});
-
-app.get('/login.html', (req, res) => {
-    const file = findHtmlForPage('login');
-    if (!file) return res.status(404).send('Login no encontrado');
-    res.sendFile(file);
-});
-
-app.get('/app', (req, res) => {
-    const file = findHtmlForPage('app') || findHtmlForPage('app');
-    if (!file) return res.status(404).send('App no encontrada');
-    res.sendFile(file);
-});
-
-app.get('/app.html', (req, res) => {
-    const file = findHtmlForPage('app');
-    if (!file) return res.status(404).send('App no encontrada');
-    res.sendFile(file);
-});
-
-app.get('/:page.html', (req, res) => {
-    const page = req.params.page;
-    if (!validPages.includes(page)) {
-        return res.status(404).send('Página no encontrada');
-    }
-
-    const filePath = findHtmlForPage(page);
-    if (!filePath) {
-        return res.status(404).send('HTML no encontrado');
-    }
-
-    res.sendFile(filePath);
-});
-
 app.use(counterDepositsRouter);
+
+app.get('/', (_req, res) => {
+    return res.json({ success: true, message: 'API del Banco funcionando' });
+});
 
 app.get('/api', (req, res) => {
     res.json({ mensaje: 'API del Banco funcionando' });
@@ -385,6 +288,24 @@ app.get('/api/session', authenticateUser, async (req, res) => {
     } catch (err) {
         console.error('Session fetch error:', err);
         return res.status(500).json({ success: false, message: 'Error obteniendo la sesión' });
+    }
+});
+
+app.get('/api/movimientos', authenticateUser, async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            `SELECT m.id, m.tipo, m.monto, m.descripcion, m.created_at
+             FROM movimientos m
+             INNER JOIN cuentas c ON c.id = m.cuenta_id
+             WHERE c.usuario_id = $1
+             ORDER BY m.created_at DESC, m.id DESC
+             LIMIT 50`,
+            [req.user.id]
+        );
+        return res.json({ success: true, data: rows });
+    } catch (err) {
+        console.error('Movement history fetch error:', err);
+        return res.status(500).json({ success: false, message: 'Error consultando los movimientos' });
     }
 });
 
@@ -412,7 +333,7 @@ app.post('/api/verification/send', async (req, res) => {
         });
     } catch (error) {
         console.error('Error enviando el código de verificación por email:', error);
-        return res.status(500).json({ success: false, message: error && error.message ? error.message : 'No se pudo enviar el código de verificación al correo.' });
+        return res.status(500).json({ success: false, message: 'No se pudo enviar el código de verificación al correo.' });
     }
 });
 
@@ -611,9 +532,48 @@ app.get('/api/balance/:numeroCuenta', authenticateUser, async (req, res) => {
     }
 });
 
+app.use((_req, res) => {
+    return res.status(404).json({ success: false, message: 'Ruta no encontrada.' });
+});
+
+app.use((error, _req, res, _next) => {
+    console.error('Request processing error:', error);
+    if (error.type === 'entity.too.large') {
+        return res.status(413).json({ success: false, message: 'La solicitud excede el tamaño permitido.' });
+    }
+    if (error.type === 'entity.parse.failed') {
+        return res.status(400).json({ success: false, message: 'El cuerpo de la solicitud no contiene JSON válido.' });
+    }
+    return res.status(500).json({ success: false, message: 'Error interno del servidor.' });
+});
+
 const PORT = process.env.PORT || 3000;
 
 if (require.main === module) {
+    const configuredDevices = [...new Set(
+        String(process.env.COUNTER_DEVICE_IDS || '')
+            .split(',')
+            .map((id) => id.trim())
+            .filter(Boolean)
+    )];
+    const invalidDeviceIds = configuredDevices.some((id) => !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(id));
+    const requiredConfig = [
+        ['JWT_SECRET', process.env.JWT_SECRET, 32],
+        ['COUNTER_DEVICE_TOKEN', process.env.COUNTER_DEVICE_TOKEN, 32],
+        ['COUNTER_DEVICE_IDS', configuredDevices.join(','), 1]
+    ];
+    const missingConfig = requiredConfig
+        .filter(([name, value, minLength]) => !value || String(value).trim().length < minLength)
+        .map(([name]) => name);
+    if (invalidDeviceIds && !missingConfig.includes('COUNTER_DEVICE_IDS')) {
+        missingConfig.push('COUNTER_DEVICE_IDS');
+    }
+
+    if (missingConfig.length > 0) {
+        console.error(`Falta configurar variables requeridas: ${missingConfig.join(', ')}`);
+        process.exit(1);
+    }
+
     ensureTables()
         .then(() => {
             app.listen(PORT, () => {

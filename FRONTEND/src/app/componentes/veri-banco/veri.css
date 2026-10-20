@@ -38,10 +38,11 @@ body {
 }
 
 .brand-logo {
-    width: 64px;
-    height: 64px;
+    width: min(180px, 70vw);
+    height: 72px;
     border-radius: 18px;
     box-shadow: 0 12px 24px rgba(0,0,0,0.2);
+    object-fit: contain;
 }
 
 .brand-wrap h1 {

@@ -60,15 +60,6 @@ a {
   margin: 0 auto;
 }
 
-.logo {
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: rgba(255,255,255,0.14);
-  padding: 6px;
-  border: 1px solid rgba(255,255,255,0.2);
-}
-
 .brand {
   margin: 0;
   font-size: clamp(1.2rem, 2vw, 1.6rem);

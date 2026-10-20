@@ -1,12 +1,8 @@
 const jwt = require('jsonwebtoken');
 
-if (!process.env.JWT_SECRET) {
-    process.env.JWT_SECRET = 'dev-jwt-secret-change-me-for-local-testing';
-}
-
 function authenticateUser(req, res, next) {
     const secret = process.env.JWT_SECRET;
-    if (!secret) {
+    if (!secret || secret.length < 32) {
         return res.status(503).json({ success: false, message: 'La autenticación no está configurada.' });
     }
 

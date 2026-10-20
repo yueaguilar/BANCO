@@ -8,11 +8,13 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+
 CREATE TABLE IF NOT EXISTS cuentas (
     id SERIAL PRIMARY KEY,
     usuario_id INTEGER NOT NULL,
     numero_cuenta VARCHAR(10) UNIQUE NOT NULL,
-    saldo NUMERIC(12,2) DEFAULT 0.00,
+    saldo NUMERIC(12,2) NOT NULL DEFAULT 0.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_usuario
@@ -20,6 +22,10 @@ CREATE TABLE IF NOT EXISTS cuentas (
         REFERENCES users(id)
         ON DELETE CASCADE
 );
+
+UPDATE cuentas SET saldo = 0 WHERE saldo IS NULL;
+ALTER TABLE cuentas ALTER COLUMN saldo SET DEFAULT 0.00;
+ALTER TABLE cuentas ALTER COLUMN saldo SET NOT NULL;
 
 CREATE TABLE IF NOT EXISTS tarjetas (
     id SERIAL PRIMARY KEY,
@@ -46,9 +52,14 @@ CREATE TABLE IF NOT EXISTS contadores (
 );
 
 ALTER TABLE contadores ADD COLUMN IF NOT EXISTS lote_id UUID;
+UPDATE contadores SET lote_id = gen_random_uuid() WHERE lote_id IS NULL;
+ALTER TABLE contadores ALTER COLUMN lote_id SET NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_contadores_dispositivo_lote
     ON contadores (dispositivo_id, lote_id)
     WHERE lote_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_contadores_pendientes
+    ON contadores (dispositivo_id, created_at DESC)
+    WHERE cantidad_billetes > 0;
 
 CREATE TABLE IF NOT EXISTS depositos (
     id BIGSERIAL PRIMARY KEY,
@@ -71,10 +82,11 @@ CREATE TABLE IF NOT EXISTS depositos (
 );
 
 ALTER TABLE depositos DROP CONSTRAINT IF EXISTS depositos_contador_id_key;
-ALTER TABLE depositos DROP CONSTRAINT IF EXISTS depositos_contador_id_key;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_depositos_contador_activo
     ON depositos (contador_id)
     WHERE estado <> 'cancelado';
+CREATE INDEX IF NOT EXISTS idx_depositos_cuenta_created_at
+    ON depositos (cuenta_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS movimientos (
     id BIGSERIAL PRIMARY KEY,
@@ -85,3 +97,6 @@ CREATE TABLE IF NOT EXISTS movimientos (
     referencia_id UUID NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_movimientos_cuenta_created_at
+    ON movimientos (cuenta_id, created_at DESC);

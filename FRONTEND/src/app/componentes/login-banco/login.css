@@ -39,22 +39,19 @@ button {
     margin: 0;
     font-size: clamp(1.6rem, 2vw, 2.2rem);
     color: #90e0ef;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    flex-wrap: wrap;
+    text-align: center;
 }
 
-#titulo::after {
-    content: "";
-    display: inline-block;
-    width: 150px;
-    height: 64px;
-    background-image: url("/logo.png");
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
+.inicio .logo {
+    display: block;
+    width: min(180px, 70vw);
+    height: 72px;
+    margin: 20px auto 0;
+    object-fit: contain;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
 }
 
 .info {
@@ -185,8 +182,4 @@ input.liquid-glass-input:active {
         padding: 18px 14px;
     }
 
-    #titulo::after {
-        width: 110px;
-        height: 48px;
-    }
 }
