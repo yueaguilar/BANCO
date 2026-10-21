@@ -190,7 +190,7 @@ async function ensureTables() {
 async function createBankAccountForUser(userId) {
     const numeroCuenta = await generateAccountNumber();
     const numeroTarjeta = await generateCardNumber();
-    const { nipHash } = await generateSecureNip();
+    const { nip, nipHash } = await generateSecureNip();
     const expiracion = generateExpirationDate();
 
     const client = await pool.connect();
@@ -218,6 +218,7 @@ async function createBankAccountForUser(userId) {
         return {
             numeroCuenta: String(cuentaRes.rows[0].numero_cuenta),
             numeroTarjeta: String(tarjeta.numero_tarjeta),
+            nip,
             mesExpiracion: Number(tarjeta.mes_expiracion),
             anioExpiracion: Number(tarjeta.anio_expiracion)
         };
