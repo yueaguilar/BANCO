@@ -97,16 +97,42 @@ Rutas relevantes:
 - `GET /api/contador/pendientes` — conteos pendientes para validación
 - `POST /api/depositos/contador/validar` — valida cuenta, contador y denominación
 - `POST /api/depositos/contador/confirmar` — confirma deposito y actualiza saldo con movimiento
+- `POST /api/contador/depositos/autenticar` — autentica cuenta y NIP desde el contador
+- `POST /api/contador/depositos/preparar` — valida los conteos declarado/detectado y calcula el importe
+- `POST /api/contador/depositos/confirmar` — acredita el depósito al recibir la confirmación `A`
 
 ---
 
 ## Depósito con contador
 
-1. El Arduino o dispositivo envía el conteo al backend con un token autorizado.
-2. El backend valida el `dispositivo_id`, la cantidad, la antigüedad del lote y la identidad del usuario.
-3. El cliente selecciona la denominación y la cuenta de destino.
-4. El backend calcula el importe como `cantidad_billetes * denominacion`.
-5. Si la operación se confirma, se actualiza el saldo y se registra el movimiento dentro de la misma transacción PostgreSQL.
+1. Arduino envía al puente Ubuntu la cuenta, el NIP y el `dispositivo_id` mediante `POST /depositos/autenticar`. El puente remite la solicitud al backend por HTTPS. El NIP se compara con `tarjetas.nip_hash` y nunca se almacena en texto plano.
+2. La autenticación incorrecta se limita a cinco intentos por cuenta y dispositivo; después la cuenta se bloquea durante 15 minutos. Una autenticación exitosa devuelve un token temporal para continuar el depósito.
+3. El contador genera un UUID `operacion_id` estable y envía al puente la denominación, la cantidad declarada y la detectada mediante `POST /depositos/preparar`, junto con el token temporal. El backend acepta denominaciones de $20, $50, $100, $200 o $500 y solo prepara el depósito si ambas cantidades coinciden.
+4. El backend calcula `importe = denominacion * cantidad_detectada` y guarda el conteo y el depósito pendiente. El `operacion_id` debe conservarse si se reintenta la solicitud.
+5. Al recibir la tecla A, Arduino envía `POST /depositos/confirmar` con el mismo UUID y `confirmacion: "A"`. El backend actualiza el saldo, registra el movimiento y marca el depósito confirmado en una transacción PostgreSQL. Repetir la confirmación devuelve el resultado existente sin volver a acreditar.
+6. El puente devuelve la respuesta backend e incluye `accepted: true` o `accepted: false`. Las solicitudes de autenticación y confirmación se envían de forma síncrona y no se guardan en la cola persistente del puente.
+
+Las tres rutas del puente requieren `x-bridge-token`, y el backend requiere además el token del dispositivo configurado y autorizado. Para iniciar el puente se deben configurar `BACKEND_URL` (HTTPS), `BRIDGE_INGEST_TOKEN`, `COUNTER_DEVICE_TOKEN` y `COUNTER_DEVICE_IDS`.
+
+Ejemplos del cuerpo que Arduino envía al puente:
+
+```json
+{ "dispositivo_id": "CNT-001", "numero_cuenta": "1234567890", "nip": "1234" }
+```
+
+```json
+{
+  "dispositivo_id": "CNT-001",
+  "operacion_id": "6ba7b810-9dad-41d1-80b4-00c04fd430c8",
+  "denominacion": 100,
+  "cantidad_declarada": 20,
+  "cantidad_detectada": 20
+}
+```
+
+```json
+{ "dispositivo_id": "CNT-001", "operacion_id": "6ba7b810-9dad-41d1-80b4-00c04fd430c8", "confirmacion": "A" }
+```
 
 ---
 
@@ -114,7 +140,14 @@ Rutas relevantes:
 
 ```bash
 cd BANCO/backend
-node --test tests/contadorRoute.test.js tests/emailService.test.js
+node --test tests/contadorRoute.test.js tests/counterCashDeposits.test.js tests/emailService.test.js
+```
+
+Pruebas del puente Ubuntu:
+
+```bash
+cd BANCO/ubuntu-bridge
+node --test bridge.test.js
 ```
 
 También se valida el build de Angular desde:
@@ -459,7 +492,9 @@ El contador solo acepta un lote finalizado en `POST /api/contador`, con el encab
 
 El intermediario Ubuntu debe generar un UUID por lote y conservarlo junto con el contenido hasta recibir confirmación del backend. Los reintentos deben reenviar el mismo UUID y cantidad; el backend devuelve el registro original en lugar de crear otro. La antigüedad se calcula con la hora de recepción del servidor, no con la hora del dispositivo.
 
-El endpoint local del bridge es `POST http://<ubuntu-en-la-red-del-contador>:8080/batches` y requiere `x-bridge-token`. Para el enlace serial, Arduino Uno 1 debe emitir `COUNT;<lote_id>;<cantidad>\n` y después `END;<lote_id>\n`; Arduino Uno 2 solo envía el JSON final cuando ambos mensajes coinciden y contesta `ACK;<lote_id>\n` al recibirlos. El bridge devuelve HTTP `202` una vez que el lote se guardó en la cola local, no cuando ya llegó a Render.
+El endpoint local del bridge es `POST http://<ubuntu-en-la-red-del-contador>:8080/batches` y requiere `x-bridge-token`. Para el enlace serial del conteo legado, Arduino Uno 1 emite `COUNT;<lote_id>;<cantidad>\n` y después `END;<lote_id>\n`; Arduino Uno 2 envía el JSON final cuando ambos mensajes coinciden y recibe `ACK;<lote_id>\n`. El bridge devuelve HTTP `202` una vez que ese lote se guardó en la cola local, no cuando ya llegó a Render.
+
+El flujo nuevo de depósitos usa los endpoints HTTP locales `POST /depositos/autenticar`, `POST /depositos/preparar` y `POST /depositos/confirmar`, todos con `x-bridge-token`. La autenticación y confirmación se reenvían por HTTPS y de forma síncrona; no se guardan en la cola del conteo legado. El Arduino debe llamar estos endpoints en Ubuntu, conservar el `operacion_id` recibido/generado para reintentos y esperar `accepted` antes de indicar que el depósito fue aprobado. Este repositorio no incluye firmware Arduino, por lo que aún se necesita implementar en el firmware el envío de las solicitudes de autenticación, conteo y tecla A.
 
 El usuario autenticado selecciona un conteo disponible y confirma el depósito. Endpoints de este flujo:
 

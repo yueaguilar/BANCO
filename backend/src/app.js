@@ -26,6 +26,7 @@ const {
 const { enviarCorreoVerificacion } = require('./services/emailService');
 const jwt = require('jsonwebtoken');
 const counterDepositsRouter = require('./routes/counterDeposits');
+const counterCashDepositsRouter = require('./routes/counterCashDeposits');
 const authenticateUser = require('./middleware/authenticateUser');
 
 const app = express();
@@ -82,6 +83,17 @@ async function ensureTables() {
                     FOREIGN KEY (cuenta_id)
                     REFERENCES cuentas(id)
                     ON DELETE CASCADE
+            )
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS contador_intentos_nip (
+                dispositivo_id VARCHAR(100) NOT NULL,
+                numero_cuenta VARCHAR(10) NOT NULL,
+                intentos INTEGER NOT NULL DEFAULT 0 CHECK (intentos >= 0),
+                bloqueado_hasta TIMESTAMPTZ,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (dispositivo_id, numero_cuenta)
             )
         `);
 
@@ -268,6 +280,7 @@ async function getSessionDataForUser(userId) {
 }
 
 app.use(counterDepositsRouter);
+app.use(counterCashDepositsRouter);
 
 app.get('/', (_req, res) => {
     return res.json({ success: true, message: 'API del Banco funcionando' });

@@ -42,6 +42,15 @@ CREATE TABLE IF NOT EXISTS tarjetas (
         ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS contador_intentos_nip (
+    dispositivo_id VARCHAR(100) NOT NULL,
+    numero_cuenta VARCHAR(10) NOT NULL,
+    intentos INTEGER NOT NULL DEFAULT 0 CHECK (intentos >= 0),
+    bloqueado_hasta TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (dispositivo_id, numero_cuenta)
+);
+
 CREATE TABLE IF NOT EXISTS contadores (
     id SERIAL PRIMARY KEY,
     dispositivo_id VARCHAR(100) NOT NULL,

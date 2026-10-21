@@ -384,3 +384,4 @@ router.get('/api/depositos/contador/:id', authenticateUser, async (req, res) => 
 });
 
 module.exports = router;
+module.exports.authenticateDevice = authenticateDevice;

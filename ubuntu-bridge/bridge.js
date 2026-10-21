@@ -110,6 +110,43 @@ function createBridgeServer({
     const processing = new Set();
     let retryTimer;
 
+    async function forwardDeposit(req, res, payload, backendPath) {
+        if (typeof payload.dispositivo_id !== 'string' || !config.deviceIds.includes(payload.dispositivo_id)) {
+            return sendJson(res, 403, { success: false, message: 'The device is not authorized.' });
+        }
+
+        try {
+            const headers = {
+                'Content-Type': 'application/json',
+                'x-device-token': config.deviceToken
+            };
+            const authorization = req.headers.authorization;
+            if (typeof authorization === 'string') headers.Authorization = authorization;
+            const response = await fetchImpl(`${config.backendUrl}${backendPath}`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(10_000)
+            });
+            let result;
+            try {
+                result = await response.json();
+            } catch {
+                result = { success: false, message: 'The backend returned an invalid response.' };
+            }
+            const decision = result && typeof result === 'object' && !Array.isArray(result)
+                ? { ...result, accepted: response.ok && result.success === true }
+                : { success: false, accepted: false, message: 'The backend returned an invalid response.' };
+            return sendJson(res, response.status, decision);
+        } catch {
+            return sendJson(res, 502, {
+                success: false,
+                accepted: false,
+                message: 'The backend could not be reached; retry with the same operation ID.'
+            });
+        }
+    }
+
     function batchPath(loteId) {
         return path.join(config.queueDirectory, `${loteId}.json`);
     }
@@ -250,6 +287,30 @@ function createBridgeServer({
                 else pending += 1;
             }
             return sendJson(res, 200, { success: true, pending, rejected });
+        }
+        const depositRoutes = {
+            '/depositos/autenticar': '/api/contador/depositos/autenticar',
+            '/depositos/preparar': '/api/contador/depositos/preparar',
+            '/depositos/confirmar': '/api/contador/depositos/confirmar'
+        };
+        if (req.method === 'POST' && Object.hasOwn(depositRoutes, url.pathname)) {
+            if (!secureEquals(config.ingestToken, req.headers['x-bridge-token'] || '')) {
+                return sendJson(res, 401, { success: false, accepted: false, message: 'Bridge authentication required.' });
+            }
+            let payload;
+            try {
+                payload = await readJsonBody(req);
+            } catch (error) {
+                return sendJson(res, error.statusCode || 400, {
+                    success: false,
+                    accepted: false,
+                    message: error.statusCode === 413 ? 'Request body too large.' : 'Invalid JSON body.'
+                });
+            }
+            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+                return sendJson(res, 400, { success: false, accepted: false, message: 'Expected a JSON object.' });
+            }
+            return forwardDeposit(req, res, payload, depositRoutes[url.pathname]);
         }
         if (req.method !== 'POST' || url.pathname !== '/batches') {
             return sendJson(res, 404, { success: false, message: 'Route not found.' });

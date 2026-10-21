@@ -117,6 +117,84 @@ test('bridge retains offline batches and retries the exact lote_id over HTTPS', 
             return { ok: true, status: 200 };
         }
     });
+
+    test('bridge forwards counter deposits over HTTPS and returns the backend decision without queuing the NIP', async () => {
+        const delivered = [];
+        const running = await startBridge({
+            fetchImpl: async (url, options) => {
+                delivered.push({ url, options });
+                if (url.endsWith('/confirmar')) {
+                    return {
+                        ok: false,
+                        status: 400,
+                        async json() {
+                            return { success: false, message: 'La confirmación debe corresponder a la tecla A.' };
+                        }
+                    };
+                }
+                const status = url.endsWith('/autenticar') ? 200 : 201;
+                return {
+                    ok: true,
+                    status,
+                    async json() {
+                        return { success: true, accepted: true, data: { importe: 2000 } };
+                    }
+                };
+            }
+        });
+        const headers = {
+            'Content-Type': 'application/json',
+            'x-bridge-token': 'test-bridge-ingest-token-with-32-chars'
+        };
+
+        try {
+            const response = await fetch(`${running.url}/depositos/autenticar`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    dispositivo_id: 'CNT-001',
+                    numero_cuenta: '1234567890',
+                    nip: '1234'
+                })
+            });
+            assert.equal(response.status, 200);
+            assert.equal((await response.json()).accepted, true);
+            assert.equal(delivered[0].url, 'https://bank.example/api/contador/depositos/autenticar');
+            assert.equal(delivered[0].options.headers['x-device-token'], 'test-counter-device-token-with-32-chars');
+            assert.equal(JSON.parse(delivered[0].options.body).nip, '1234');
+            assert.equal((await fs.readdir(running.queueDirectory)).filter((name) => name.endsWith('.json')).length, 0);
+
+            const token = 'counter-session-token';
+            const prepared = await fetch(`${running.url}/depositos/preparar`, {
+                method: 'POST',
+                headers: { ...headers, Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    dispositivo_id: 'CNT-001',
+                    operacion_id: crypto.randomUUID(),
+                    denominacion: 100,
+                    cantidad_declarada: 20,
+                    cantidad_detectada: 20
+                })
+            });
+            assert.equal(prepared.status, 201);
+            assert.equal((await prepared.json()).accepted, true);
+            assert.equal(delivered[1].url, 'https://bank.example/api/contador/depositos/preparar');
+            assert.equal(delivered[1].options.headers.Authorization, `Bearer ${token}`);
+
+            const rejected = await fetch(`${running.url}/depositos/confirmar`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ dispositivo_id: 'CNT-001', operacion_id: crypto.randomUUID(), confirmacion: 'X' })
+            });
+            assert.equal(rejected.status, 400);
+            const rejectionBody = await rejected.json();
+            assert.equal(rejectionBody.accepted, false);
+            assert.equal(rejectionBody.success, false);
+            assert.equal(delivered[2].url, 'https://bank.example/api/contador/depositos/confirmar');
+        } finally {
+            await running.cleanup();
+        }
+    });
     const batch = validBatch();
 
     try {
