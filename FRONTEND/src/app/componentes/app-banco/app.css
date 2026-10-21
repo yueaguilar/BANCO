@@ -45,7 +45,9 @@
   color: var(--text);
   font-weight: 600;
   min-height: 72px;
-  transition: transform 0.2s ease, background 0.2s ease;
+  text-align: center;
+  text-decoration: none;
+  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .transactions {
@@ -154,5 +156,3 @@
     grid-template-columns: 1fr;
   }
 }
-
-.counter-action { display:flex; align-items:center; justify-content:center; box-sizing:border-box; text-align:center; text-decoration:none; border:1px solid rgba(212,175,55,.5); background:rgba(212,175,55,.08); }

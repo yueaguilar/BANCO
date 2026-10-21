@@ -1,0 +1,94 @@
+<header class="topbar">
+  <div class="topbar-inner">
+    <a routerLink="/app" aria-label="Volver al inicio"><img src="/img/logo2.png" alt="Logo de Banco LCDK" class="logo"></a>
+    <h1 class="brand">LCDKK</h1>
+    <a routerLink="/cuenta" class="icon-btn">Cuenta</a>
+  </div>
+</header>
+
+<main class="deposit-page">
+  <a routerLink="/app" class="back-link">← Volver al inicio</a>
+  <section class="intro">
+    <span class="eyebrow">DEPÓSITOS</span>
+    <h2>Depositar</h2>
+    <p>Selecciona un conteo reciente del dispositivo y valida la cuenta antes de confirmar.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <div><span class="step">01</span><h3>Validar depósito</h3></div>
+      <span class="status" [class.online]="backendDisponible">{{ backendComprobado ? (backendDisponible ? 'Backend disponible' : 'Backend sin conexión') : 'Comprobando backend…' }}</span>
+    </div>
+
+    @if (!token) {
+      <p class="message error">Inicia sesión para validar y confirmar un depósito.</p>
+      <a routerLink="/login" class="back-link">Ir a iniciar sesión</a>
+    } @else if (!resumen) {
+      <label for="cuenta">Número de cuenta</label>
+      <input id="cuenta" name="cuenta" [(ngModel)]="numeroCuenta" [disabled]="!!operacionId" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="Ingresa los 10 dígitos de la cuenta">
+
+      <label for="conteo">Conteo registrado por un dispositivo autorizado</label>
+      <div class="count-controls">
+        <select id="conteo" name="conteo" [(ngModel)]="contadorId" [disabled]="!!operacionId">
+          <option [ngValue]="null">Selecciona un conteo disponible</option>
+          @for (conteo of conteos; track conteo.id) {
+            <option [ngValue]="conteo.id">
+              #{{ conteo.id }} · {{ conteo.cantidad_billetes }} billetes · {{ conteo.dispositivo_id }} · {{ conteo.created_at | date:'short' }}
+            </option>
+          }
+        </select>
+        <button class="secondary" type="button" [disabled]="cargandoConteos || !!operacionId" (click)="cargarConteos()">
+          {{ cargandoConteos ? 'Actualizando…' : 'Actualizar' }}
+        </button>
+      </div>
+
+      @if (conteos.length === 0 && !cargandoConteos) {
+        <p class="muted">No hay conteos recientes disponibles. El contador debe enviar el lote autorizado primero.</p>
+      }
+
+      <label for="denominacion">Denominación del lote</label>
+      <select id="denominacion" name="denominacion" [(ngModel)]="denominacion" [disabled]="!!operacionId">
+        <option [ngValue]="20">$20 MXN</option>
+        <option [ngValue]="50">$50 MXN</option>
+        <option [ngValue]="100">$100 MXN</option>
+        <option [ngValue]="200">$200 MXN</option>
+        <option [ngValue]="500">$500 MXN</option>
+      </select>
+
+      @if (conteoSeleccionado) {
+        <div class="estimate">
+          <span>Estimación informativa · {{ conteoSeleccionado.cantidad_billetes }} billetes</span>
+          <strong>{{ (denominacion * conteoSeleccionado.cantidad_billetes) | currency:'MXN':'symbol':'1.2-2' }}</strong>
+        </div>
+      }
+
+      <button class="primary submit" type="button" [disabled]="validando || !formularioValido" (click)="validarDeposito()">
+        {{ validando ? 'Validando…' : (operacionId ? 'Reintentar validación' : 'Validar y mostrar resumen') }}
+      </button>
+    } @else {
+      <div class="summary">
+        <p><span>Cuenta</span><strong>{{ resumen.numero_cuenta }}</strong></p>
+        <p><span>Denominación</span><strong>{{ resumen.denominacion | currency:'MXN':'symbol':'1.0-0' }}</strong></p>
+        <p><span>Billetes</span><strong>{{ resumen.cantidad_billetes }}</strong></p>
+        <p class="total"><span>Importe calculado por el servidor</span><strong>{{ resumen.importe | currency:'MXN':'symbol':'1.2-2' }}</strong></p>
+      </div>
+      <p class="muted">El saldo solo se actualizará al confirmar. Revisa los datos antes de continuar.</p>
+      <button class="primary submit" type="button" [disabled]="confirmando" (click)="confirmarDeposito()">
+        {{ confirmando ? 'Confirmando…' : 'Confirmar depósito' }}
+      </button>
+      <button class="secondary cancel" type="button" [disabled]="confirmando" (click)="cancelarValidacion()">Cancelar y volver</button>
+    }
+
+    @if (mensaje) {
+      <p class="message" [class.error]="error" role="status">{{ mensaje }}</p>
+    }
+    @if (saldoActualizado !== null) {
+      <div class="summary" role="status">
+        <p><span>Saldo actualizado</span><strong>{{ saldoActualizado | currency:'MXN':'symbol':'1.2-2' }}</strong></p>
+        <p><span>Movimiento registrado</span><strong>Depósito · {{ importeConfirmado | currency:'MXN':'symbol':'1.2-2' }}</strong></p>
+      </div>
+    }
+  </section>
+
+  <p class="notice"><strong>Seguridad:</strong> este flujo no acepta conteos manuales del navegador ni montos del cliente. Solo aparecen conteos recientes registrados por dispositivos autorizados; el backend comprueba que la cuenta pertenezca a la sesión y registra saldo, depósito e historial en una transacción. El dispositivo debe comunicarse con la API mediante un intermediario seguro.</p>
+</main>
