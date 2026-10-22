@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const pool = require('./database');
 const bcrypt = require('bcrypt');
+const { randomInt } = require('node:crypto');
 const generateAccountNumber = require('./services/accountGenerator');
 const {
     generateCardNumber,
@@ -30,6 +31,12 @@ const counterCashDepositsRouter = require('./routes/counterCashDeposits');
 const authenticateUser = require('./middleware/authenticateUser');
 
 const app = express();
+const TEMPORARY_NIP_TTL_MS = 5 * 60 * 1000;
+const TEMPORARY_NIP_FAILURE_LIMIT = 5;
+const TEMPORARY_NIP_LOCK_MS = 15 * 60 * 1000;
+const TEMPORARY_NIP_SUCCESS_INTERVAL_MS = 60 * 1000;
+// This in-memory store requires the API to run as a single instance.
+const temporaryNips = new Map();
 
 app.use(cors());
 app.use(express.json({ limit: '16kb' }));
@@ -83,6 +90,16 @@ async function ensureTables() {
                     FOREIGN KEY (cuenta_id)
                     REFERENCES cuentas(id)
                     ON DELETE CASCADE
+            )
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS temporary_nip_attempts (
+                user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
+                blocked_until TIMESTAMPTZ,
+                last_success_at TIMESTAMPTZ,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         `);
 
@@ -320,6 +337,154 @@ app.get('/api/movimientos', authenticateUser, async (req, res) => {
     } catch (err) {
         console.error('Movement history fetch error:', err);
         return res.status(500).json({ success: false, message: 'Error consultando los movimientos' });
+    }
+});
+
+app.post('/api/account/temporary-nip', authenticateUser, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.set('Pragma', 'no-cache');
+
+    const password = req.body?.password;
+    if (typeof password !== 'string' || password.length === 0) {
+        return res.status(400).json({ success: false, message: 'Debes ingresar tu contraseña.' });
+    }
+
+    let client;
+    let transactionStarted = false;
+    try {
+        const userResult = await pool.query(
+            'SELECT password FROM users WHERE id = $1',
+            [req.user.id]
+        );
+        if (userResult.rows.length === 0 || !userResult.rows[0].password) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
+        }
+
+        client = await pool.connect();
+        await client.query('BEGIN');
+        transactionStarted = true;
+        await client.query(
+            'INSERT INTO temporary_nip_attempts (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING',
+            [req.user.id]
+        );
+        const attemptResult = await client.query(
+            `SELECT failed_attempts, blocked_until, last_success_at
+             FROM temporary_nip_attempts
+             WHERE user_id = $1
+             FOR UPDATE`,
+            [req.user.id]
+        );
+        const attempt = attemptResult.rows[0];
+
+        if (attempt.blocked_until && new Date(attempt.blocked_until).getTime() > Date.now()) {
+            await client.query('COMMIT');
+            transactionStarted = false;
+            const retryAfterSeconds = Math.ceil(
+                (new Date(attempt.blocked_until).getTime() - Date.now()) / 1000
+            );
+            res.set('Retry-After', String(retryAfterSeconds));
+            return res.status(429).json({
+                success: false,
+                message: 'Demasiados intentos fallidos. Inténtalo de nuevo en 15 minutos.'
+            });
+        }
+
+        const passwordMatches = await bcrypt.compare(password, userResult.rows[0].password);
+        if (!passwordMatches) {
+            const failedAttempt = await client.query(
+                `UPDATE temporary_nip_attempts
+                 SET failed_attempts = CASE
+                         WHEN blocked_until IS NOT NULL AND blocked_until <= NOW() THEN 1
+                         ELSE failed_attempts + 1
+                     END,
+                     blocked_until = CASE
+                         WHEN CASE
+                             WHEN blocked_until IS NOT NULL AND blocked_until <= NOW() THEN 1
+                             ELSE failed_attempts + 1
+                         END >= $2
+                         THEN NOW() + ($3 * INTERVAL '1 millisecond')
+                         ELSE NULL
+                     END,
+                     updated_at = NOW()
+                 WHERE user_id = $1
+                 RETURNING failed_attempts, blocked_until`,
+                [req.user.id, TEMPORARY_NIP_FAILURE_LIMIT, TEMPORARY_NIP_LOCK_MS]
+            );
+            await client.query('COMMIT');
+            transactionStarted = false;
+
+            const lockUntil = failedAttempt.rows[0]?.blocked_until;
+            if (lockUntil && new Date(lockUntil).getTime() > Date.now()) {
+                res.set('Retry-After', String(Math.ceil(
+                    (new Date(lockUntil).getTime() - Date.now()) / 1000
+                )));
+                return res.status(429).json({
+                    success: false,
+                    message: 'Demasiados intentos fallidos. Inténtalo de nuevo en 15 minutos.'
+                });
+            }
+            return res.status(401).json({ success: false, message: 'La contraseña es incorrecta.' });
+        }
+
+        const lastSuccessAt = attempt.last_success_at
+            ? new Date(attempt.last_success_at).getTime()
+            : 0;
+        if (lastSuccessAt && Date.now() - lastSuccessAt < TEMPORARY_NIP_SUCCESS_INTERVAL_MS) {
+            await client.query(
+                `UPDATE temporary_nip_attempts
+                 SET failed_attempts = 0, blocked_until = NULL, updated_at = NOW()
+                 WHERE user_id = $1`,
+                [req.user.id]
+            );
+            await client.query('COMMIT');
+            transactionStarted = false;
+            const retryAfterSeconds = Math.ceil(
+                (TEMPORARY_NIP_SUCCESS_INTERVAL_MS - (Date.now() - lastSuccessAt)) / 1000
+            );
+            res.set('Retry-After', String(retryAfterSeconds));
+            return res.status(429).json({
+                success: false,
+                message: 'Ya consultaste un NIP temporal recientemente. Inténtalo de nuevo en un minuto.'
+            });
+        }
+
+        const code = String(randomInt(0, 10000)).padStart(4, '0');
+        const expiresAt = Date.now() + TEMPORARY_NIP_TTL_MS;
+        await client.query(
+            `UPDATE temporary_nip_attempts
+             SET failed_attempts = 0, blocked_until = NULL, last_success_at = NOW(), updated_at = NOW()
+             WHERE user_id = $1`,
+            [req.user.id]
+        );
+        await client.query('COMMIT');
+        transactionStarted = false;
+
+        const existing = temporaryNips.get(req.user.id);
+        if (existing) clearTimeout(existing.expirationTimer);
+        const expirationTimer = setTimeout(() => {
+            const current = temporaryNips.get(req.user.id);
+            if (current?.expiresAt === expiresAt) temporaryNips.delete(req.user.id);
+        }, TEMPORARY_NIP_TTL_MS);
+        expirationTimer.unref?.();
+        temporaryNips.set(req.user.id, { code, expiresAt, expirationTimer });
+
+        return res.json({
+            success: true,
+            code,
+            expiresInSeconds: TEMPORARY_NIP_TTL_MS / 1000
+        });
+    } catch (error) {
+        if (client && transactionStarted) {
+            try {
+                await client.query('ROLLBACK');
+            } catch (rollbackError) {
+                console.error('Temporary NIP transaction rollback failed:', rollbackError);
+            }
+        }
+        console.error('Temporary NIP request error:', error);
+        return res.status(500).json({ success: false, message: 'No se pudo consultar el NIP temporal.' });
+    } finally {
+        client?.release();
     }
 });
 

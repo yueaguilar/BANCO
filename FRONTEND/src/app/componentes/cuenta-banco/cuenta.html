@@ -35,6 +35,7 @@
         <div class="account-number-row">
             <span>NIP</span>
             <strong id="nipDisplay">****</strong>
+            <button class="ghost-btn" id="consultTemporaryNip" type="button">Consultar NIP temporal</button>
         </div>
 
         <div class="action-row">
@@ -140,6 +141,27 @@
             <div class="detail-row"><span>NIP</span><strong id="detailNip">****</strong></div>
             <div class="detail-row"><span>Vigencia</span><strong id="detailExpiry">--/--</strong></div>
         </div>
-        <small class="detail-note">El NIP se guarda encriptado; solo se muestra cuando se crea la cuenta.</small>
+        <small class="detail-note">El NIP real nunca se muestra. Puedes solicitar un NIP temporal verificando tu contraseña.</small>
+    </div>
+</div>
+
+<div id="temporaryNipModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="temporaryNipTitle">
+    <div class="modal-panel">
+        <button id="closeTemporaryNip" class="close" type="button" aria-label="Cerrar">×</button>
+        <h3 id="temporaryNipTitle">Consultar NIP temporal</h3>
+        <form id="temporaryNipForm">
+            <label class="temporary-nip-label" for="temporaryNipPassword">Confirma tu contraseña</label>
+            <input id="temporaryNipPassword" class="temporary-nip-input" type="password" autocomplete="current-password" required>
+            <p id="temporaryNipError" class="temporary-nip-error" role="alert" hidden></p>
+            <div id="temporaryNipResult" class="temporary-nip-result" hidden>
+                <span>NIP temporal</span>
+                <strong id="temporaryNipCode">****</strong>
+                <span>Vence en <time id="temporaryNipCountdown">05:00</time></span>
+            </div>
+            <div class="temporary-nip-actions">
+                <button id="cancelTemporaryNip" class="ghost-btn" type="button">Cancelar</button>
+                <button id="confirmTemporaryNip" class="primary-btn" type="submit">Confirmar</button>
+            </div>
+        </form>
     </div>
 </div>

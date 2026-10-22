@@ -7,7 +7,6 @@ interface User {
 interface BankData {
   saldo?: number | string;
   numeroCuenta?: number | string;
-  nip?: number | string;
   mesExpiracion?: number | string;
   anioExpiracion?: number | string;
   numeroTarjeta?: number | string;
@@ -21,7 +20,8 @@ interface SessionData {
 }
 import { API_URL } from '../../api-config';
 
-export async function iniciarApp(): Promise<void> {
+export async function iniciarApp(): Promise<() => void> {
+  let countdownInterval: ReturnType<typeof setInterval> | undefined;
 
   const formatMoney = (
     value: number | string | null | undefined
@@ -37,14 +37,21 @@ export async function iniciarApp(): Promise<void> {
       const storedUser = localStorage.getItem('user');
       const storedBankData = localStorage.getItem('bankData');
 
+      const bankData = storedBankData
+        ? JSON.parse(storedBankData) as BankData
+        : null;
+
+      if (bankData && 'nip' in bankData) {
+        delete bankData['nip'];
+        localStorage.setItem('bankData', JSON.stringify(bankData));
+      }
+
       return {
         user: storedUser
           ? JSON.parse(storedUser) as User
           : null,
 
-        bankData: storedBankData
-          ? JSON.parse(storedBankData) as BankData
-          : null
+        bankData
       };
 
     } catch (error) {
@@ -143,19 +150,8 @@ export async function iniciarApp(): Promise<void> {
       accountStrong.textContent = num;
     }
 
-    // El NIP solo se muestra si el servidor lo entregó.
-    // En la BD solo existe el hash.
-
-    const nipStrong =
-      document.getElementById('nipDisplay');
-
-    if (nipStrong) {
-
-      nipStrong.textContent =
-        bankData?.nip
-          ? String(bankData.nip)
-          : '****';
-    }
+    const nipStrong = document.getElementById('nipDisplay');
+    if (nipStrong) nipStrong.textContent = '****';
 
     // Panel "Ver detalle"
 
@@ -184,12 +180,7 @@ export async function iniciarApp(): Promise<void> {
         : 'No disponible'
     );
 
-    setText(
-      'detailNip',
-      bankData?.nip
-        ? String(bankData.nip)
-        : '****'
-    );
+    setText('detailNip', '****');
 
     setText(
       'detailExpiry',
@@ -417,6 +408,214 @@ export async function iniciarApp(): Promise<void> {
     );
   }
 
+  const temporaryNipModal =
+    document.getElementById('temporaryNipModal');
+  const temporaryNipForm =
+    document.getElementById('temporaryNipForm') as HTMLFormElement | null;
+  const temporaryNipOpen =
+    document.getElementById('consultTemporaryNip');
+  const temporaryNipClose =
+    document.getElementById('closeTemporaryNip');
+  const temporaryNipCancel =
+    document.getElementById('cancelTemporaryNip');
+  const temporaryNipPassword =
+    document.getElementById('temporaryNipPassword') as HTMLInputElement | null;
+  const temporaryNipError =
+    document.getElementById('temporaryNipError');
+  const temporaryNipResult =
+    document.getElementById('temporaryNipResult');
+  const temporaryNipCode =
+    document.getElementById('temporaryNipCode');
+  const temporaryNipCountdown =
+    document.getElementById('temporaryNipCountdown');
+  const temporaryNipConfirm =
+    document.getElementById('confirmTemporaryNip') as HTMLButtonElement | null;
+  let temporaryNipExpiresAt = 0;
+  let temporaryNipRequestController: AbortController | null = null;
+
+  const stopCountdown = (): void => {
+    if (countdownInterval !== undefined) {
+      clearInterval(countdownInterval);
+      countdownInterval = undefined;
+    }
+  };
+
+  const clearTemporaryNip = (expired = false): void => {
+    stopCountdown();
+    temporaryNipExpiresAt = 0;
+    if (temporaryNipCode) temporaryNipCode.textContent = '****';
+    if (temporaryNipResult) temporaryNipResult.hidden = true;
+    if (temporaryNipCountdown) temporaryNipCountdown.textContent = '05:00';
+    if (expired && temporaryNipError) {
+      temporaryNipError.textContent = 'El NIP temporal expiró.';
+      temporaryNipError.hidden = false;
+    }
+  };
+
+  const closeTemporaryNipModal = (): void => {
+    temporaryNipRequestController?.abort();
+    temporaryNipRequestController = null;
+    clearTemporaryNip();
+    if (temporaryNipModal) temporaryNipModal.classList.add('hidden');
+    if (temporaryNipPassword) temporaryNipPassword.value = '';
+    if (temporaryNipError) temporaryNipError.hidden = true;
+  };
+
+  const displayTemporaryNip = (
+    code: string,
+    durationSeconds: number,
+    sessionToken: string
+  ): void => {
+    clearTemporaryNip();
+    if (!temporaryNipCode || !temporaryNipResult || !temporaryNipCountdown) return;
+
+    temporaryNipCode.textContent = code;
+    temporaryNipResult.hidden = false;
+    temporaryNipExpiresAt = Date.now() + durationSeconds * 1000;
+    const updateCountdown = (): void => {
+      if (localStorage.getItem('sessionToken') !== sessionToken) {
+        closeTemporaryNipModal();
+        return;
+      }
+
+      const remainingSeconds = Math.max(
+        0,
+        Math.ceil((temporaryNipExpiresAt - Date.now()) / 1000)
+      );
+      const minutes = Math.floor(remainingSeconds / 60);
+      const seconds = remainingSeconds % 60;
+      temporaryNipCountdown.textContent =
+        `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+      if (remainingSeconds === 0) clearTemporaryNip(true);
+    };
+
+    updateCountdown();
+    countdownInterval = setInterval(updateCountdown, 1000);
+  };
+
+  const showTemporaryNipError = (message: string): void => {
+    if (temporaryNipError) {
+      temporaryNipError.textContent = message;
+      temporaryNipError.hidden = false;
+    }
+  };
+
+  const openTemporaryNipModal = (): void => {
+    clearTemporaryNip();
+    if (temporaryNipError) temporaryNipError.hidden = true;
+    if (temporaryNipModal) temporaryNipModal.classList.remove('hidden');
+    temporaryNipPassword?.focus();
+  };
+
+  const submitTemporaryNip = async (event: SubmitEvent): Promise<void> => {
+    event.preventDefault();
+    if (!temporaryNipPassword || !temporaryNipConfirm) return;
+
+    const token = localStorage.getItem('sessionToken') || '';
+    if (!token) {
+      showTemporaryNipError('Tu sesión no es válida. Inicia sesión nuevamente.');
+      return;
+    }
+
+    if (temporaryNipError) temporaryNipError.hidden = true;
+    temporaryNipConfirm.disabled = true;
+    const controller = new AbortController();
+    temporaryNipRequestController = controller;
+    try {
+      const response = await fetch(`${API_URL}/api/account/temporary-nip`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        cache: 'no-store',
+        signal: controller.signal,
+        body: JSON.stringify({ password: temporaryNipPassword.value })
+      });
+      const data = await response.json() as {
+        success?: boolean;
+        message?: string;
+        code?: string;
+        expiresInSeconds?: number;
+      };
+
+      if (!response.ok || !data.success) {
+        showTemporaryNipError(data.message || 'No se pudo consultar el NIP temporal.');
+        return;
+      }
+
+      if (
+        typeof data.code !== 'string' ||
+        !/^\d{4}$/.test(data.code) ||
+        typeof data.expiresInSeconds !== 'number' ||
+        !Number.isFinite(data.expiresInSeconds)
+      ) {
+        showTemporaryNipError('El servidor devolvió una respuesta inválida.');
+        return;
+      }
+
+      if (
+        controller.signal.aborted ||
+        !temporaryNipModal ||
+        temporaryNipModal.classList.contains('hidden')
+      ) {
+        return;
+      }
+      if (localStorage.getItem('sessionToken') !== token) {
+        closeTemporaryNipModal();
+        return;
+      }
+
+      temporaryNipPassword.value = '';
+      displayTemporaryNip(data.code, Math.min(data.expiresInSeconds!, 300), token);
+    } catch {
+      if (!controller.signal.aborted) {
+        showTemporaryNipError('No se pudo conectar con el servidor. Inténtalo nuevamente.');
+      }
+    } finally {
+      if (temporaryNipRequestController === controller) {
+        temporaryNipRequestController = null;
+      }
+      temporaryNipConfirm.disabled = false;
+    }
+  };
+
+  temporaryNipOpen?.addEventListener('click', openTemporaryNipModal);
+  temporaryNipClose?.addEventListener('click', closeTemporaryNipModal);
+  temporaryNipCancel?.addEventListener('click', closeTemporaryNipModal);
+  const handleTemporaryNipSubmit = (event: SubmitEvent): void => {
+    void submitTemporaryNip(event);
+  };
+  temporaryNipForm?.addEventListener('submit', handleTemporaryNipSubmit);
+  const handleTemporaryNipBackdrop = (event: MouseEvent): void => {
+    if (event.target === temporaryNipModal) closeTemporaryNipModal();
+  };
+  temporaryNipModal?.addEventListener('click', handleTemporaryNipBackdrop);
+  const handleTemporaryNipEscape = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' && temporaryNipModal && !temporaryNipModal.classList.contains('hidden')) {
+      closeTemporaryNipModal();
+    }
+  };
+  const handleSessionStorageChange = (event: StorageEvent): void => {
+    if (event.key === 'sessionToken' && event.newValue !== event.oldValue) {
+      closeTemporaryNipModal();
+    }
+  };
+  document.addEventListener('keydown', handleTemporaryNipEscape);
+  window.addEventListener('storage', handleSessionStorageChange);
+
+  const cleanup = (): void => {
+    closeTemporaryNipModal();
+    temporaryNipOpen?.removeEventListener('click', openTemporaryNipModal);
+    temporaryNipClose?.removeEventListener('click', closeTemporaryNipModal);
+    temporaryNipCancel?.removeEventListener('click', closeTemporaryNipModal);
+    temporaryNipForm?.removeEventListener('submit', handleTemporaryNipSubmit);
+    temporaryNipModal?.removeEventListener('click', handleTemporaryNipBackdrop);
+    document.removeEventListener('keydown', handleTemporaryNipEscape);
+    window.removeEventListener('storage', handleSessionStorageChange);
+  };
+
   // ==========================================
   // SESIÓN
   // ==========================================
@@ -434,7 +633,7 @@ export async function iniciarApp(): Promise<void> {
       local.bankData
     );
 
-    return;
+    return cleanup;
   }
 
   const data =
@@ -474,4 +673,6 @@ export async function iniciarApp(): Promise<void> {
       local.bankData
     );
   }
+
+  return cleanup;
 }

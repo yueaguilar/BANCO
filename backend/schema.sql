@@ -42,6 +42,14 @@ CREATE TABLE IF NOT EXISTS tarjetas (
         ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS temporary_nip_attempts (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
+    blocked_until TIMESTAMPTZ,
+    last_success_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS contador_intentos_nip (
     dispositivo_id VARCHAR(100) NOT NULL,
     numero_cuenta VARCHAR(10) NOT NULL,
