@@ -102,14 +102,14 @@ export async function iniciarApp(): Promise<void> {
       parsedBank = null;
     }
 
-    if (!token || !parsedUser?.email) {
+    if (!token) {
       return {
         user: null,
         bankData: null
       };
     }
 
-    if (!parsedBank) {
+    if (token) {
 
       try {
 

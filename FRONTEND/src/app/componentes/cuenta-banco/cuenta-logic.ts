@@ -425,7 +425,7 @@ export async function iniciarApp(): Promise<void> {
     readLocalSession();
 
   const token = localStorage.getItem('sessionToken') || '';
-  const needsFetch = Boolean(token) && !local.bankData;
+  const needsFetch = Boolean(token);
 
   if (!needsFetch) {
 

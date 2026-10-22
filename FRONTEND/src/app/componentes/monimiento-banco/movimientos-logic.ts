@@ -42,6 +42,7 @@ export async function iniciarApp(): Promise<void> {
   const getSession = async (): Promise<Session> => {
     let user: User | null = null;
     let bankData: BankData | null = null;
+    const token = localStorage.getItem('sessionToken') || '';
 
     try {
       user = JSON.parse(localStorage.getItem('user') as string);
@@ -51,14 +52,12 @@ export async function iniciarApp(): Promise<void> {
       bankData = null;
     }
 
-    if (!user?.email) {
+    if (!token && !user?.email) {
       return { user: null, bankData: null };
     }
 
-    if (!bankData) {
+    if (token) {
       try {
-        const token = localStorage.getItem('sessionToken') || '';
-        if (!token) return { user: null, bankData: null };
         const response = await fetch(`${API_URL}/api/session`, {
           headers: { Authorization: `Bearer ${token}` }
         });
