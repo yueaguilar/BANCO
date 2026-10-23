@@ -49,12 +49,7 @@ constructor(
   enviarCodigo(): void {
     this.errorMessage = '';
 
-    if (!this.email.trim() || !this.password) {
-      this.errorMessage = 'Correo y contraseña son obligatorios.';
-      return;
-    }
-
-    if (this.phone.length < 10) {
+    if (this.phone.length !== 10) {
       this.errorMessage = 'Ingresa un número de celular válido de 10 dígitos.';
       return;
     }
@@ -62,7 +57,6 @@ constructor(
     this.loading = true;
 
     this.http.post<any>(`${this.apiUrl}/verification/send`, {
-      email: this.email.trim(),
       phone: this.phone
     }).subscribe({
     next: (res) => {
@@ -86,10 +80,13 @@ error: (err) => {
 
   verificarYAutenticar(): void {
     this.errorMessage = '';
+    if (!this.email.trim() || !this.password) {
+      this.errorMessage = 'Correo y contraseña son obligatorios para crear la cuenta o iniciar sesión.';
+      return;
+    }
     this.loading = true;
 
     this.http.post<any>(`${this.apiUrl}/verification/verify`, {
-      email: this.email.trim(),
       phone: this.phone,
       code: this.code
     }).subscribe({
@@ -137,7 +134,7 @@ error: (err) => {
          error: (err) => {
   this.loading = false;
   this.errorMessage =
-    err?.error?.message || 'Error al enviar el código de verificación.';
+    err?.error?.message || 'Error al completar la autenticación.';
   this.cdr.markForCheck();
 }
         });
@@ -145,7 +142,7 @@ error: (err) => {
       error: (err) => {
   this.loading = false;
   this.errorMessage =
-    err?.error?.message || 'Error al enviar el código de verificación.';
+    err?.error?.message || 'Error al verificar el código SMS.';
   this.cdr.markForCheck();
 }
     });

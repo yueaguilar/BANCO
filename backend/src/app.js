@@ -18,13 +18,12 @@ const {
     generateVerificationCode,
     normalizePhone,
     storeVerificationCode,
+    discardVerificationCode,
     consumeVerificationCode,
-    markPhoneVerified,
     isPhoneVerified,
-    markEmailVerified,
-    isEmailVerified
+    VerificationRateLimitError
 } = require('./services/verificationService');
-const { enviarCorreoVerificacion } = require('./services/emailService');
+const { sendSms } = require('./services/textbeeService');
 const jwt = require('jsonwebtoken');
 const counterDepositsRouter = require('./routes/counterDeposits');
 const counterCashDepositsRouter = require('./routes/counterCashDeposits');
@@ -62,6 +61,17 @@ async function ensureTables() {
         `);
 
         await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT');
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS phone_verifications (
+                phone VARCHAR(10) PRIMARY KEY,
+                code_hash CHAR(64),
+                expires_at TIMESTAMPTZ,
+                failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
+                last_sent_at TIMESTAMPTZ,
+                verified_until TIMESTAMPTZ
+            )
+        `);
 
         await pool.query(`
             CREATE TABLE IF NOT EXISTS cuentas (
@@ -489,55 +499,62 @@ app.post('/api/account/temporary-nip', authenticateUser, async (req, res) => {
 });
 
 app.post('/api/verification/send', async (req, res) => {
-    const { phone, email } = req.body;
+    const { phone } = req.body || {};
     const normalizedPhone = normalizePhone(phone);
-    const normalizedEmail = String(email || '').trim().toLowerCase();
 
-    if (!normalizedEmail) {
-        return res.status(400).json({ success: false, message: 'Debes ingresar un correo electrónico válido.' });
+    if (!normalizedPhone) {
+        return res.status(400).json({ success: false, message: 'Ingresa un número mexicano válido de 10 dígitos.' });
     }
 
-    if (normalizedPhone && normalizedPhone.length < 10) {
-        return res.status(400).json({ success: false, message: 'Debes ingresar un número de teléfono válido para guardar el dato del usuario.' });
+    const code = generateVerificationCode();
+    try {
+        await storeVerificationCode(normalizedPhone, code);
+    } catch (error) {
+        if (error instanceof VerificationRateLimitError) {
+            return res.status(error.statusCode).json({ success: false, message: error.message });
+        }
+        console.error('Error al guardar el desafío de verificación SMS.');
+        return res.status(500).json({ success: false, message: 'No se pudo preparar la verificación del teléfono.' });
     }
 
     try {
-        const code = generateVerificationCode();
-        await enviarCorreoVerificacion(normalizedEmail, code);
-        storeVerificationCode(normalizedEmail, code, 5 * 60 * 1000);
-
-        return res.json({
-            success: true,
-            message: 'Código de verificación enviado al correo electrónico.'
-        });
-    } catch (error) {
-        console.error('Error enviando el código de verificación por email:', error);
-        return res.status(500).json({ success: false, message: 'No se pudo enviar el código de verificación al correo.' });
+        await sendSms(`+52${normalizedPhone}`, `Tu código de verificación de Banco KIKE es ${code}. Expira en 5 minutos.`);
+    } catch {
+        try {
+            await discardVerificationCode(normalizedPhone, code);
+        } catch {
+            console.error('Error al invalidar un desafío SMS cuyo envío fue rechazado.');
+        }
+        console.error('Error al enviar el SMS mediante TextBee.');
+        return res.status(502).json({ success: false, message: 'No se pudo enviar el SMS. Inténtalo de nuevo más tarde.' });
     }
+
+    return res.json({
+        success: true,
+        message: 'Código SMS enviado al teléfono.'
+    });
 });
 
 app.post('/api/verification/verify', async (req, res) => {
-    const { phone, email, code } = req.body;
+    const { phone, code } = req.body || {};
     const normalizedPhone = normalizePhone(phone);
-    const normalizedEmail = String(email || '').trim().toLowerCase();
 
-    if (!normalizedEmail || !code) {
-        return res.status(400).json({ success: false, message: 'Correo y código requeridos' });
+    if (!normalizedPhone || typeof code !== 'string' || !/^\d{6}$/.test(code)) {
+        return res.status(400).json({ success: false, message: 'Ingresa un teléfono válido y un código de seis dígitos.' });
     }
 
-    const valid = consumeVerificationCode(normalizedEmail, code);
+    try {
+        const valid = await consumeVerificationCode(normalizedPhone, code);
 
-    if (!valid) {
-        return res.status(401).json({ success: false, message: 'El código de verificación es inválido o expiró.' });
+        if (!valid) {
+            return res.status(401).json({ success: false, message: 'El código de verificación es inválido o expiró.' });
+        }
+
+        return res.json({ success: true, message: 'Teléfono verificado correctamente.' });
+    } catch (error) {
+        console.error('Error al verificar el código SMS.');
+        return res.status(500).json({ success: false, message: 'No se pudo verificar el código.' });
     }
-
-    markEmailVerified(normalizedEmail, 10 * 60 * 1000);
-
-    if (normalizedPhone) {
-        markPhoneVerified(normalizedPhone, 10 * 60 * 1000);
-    }
-
-    return res.json({ success: true, message: 'Código verificado correctamente.' });
 });
 
 app.post('/api/auth', async (req, res) => {
@@ -553,15 +570,15 @@ app.post('/api/auth', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Debes ingresar tu número de teléfono para continuar.' });
     }
 
-    if (!isEmailVerified(normalizedEmail)) {
-        return res.status(401).json({ success: false, message: 'Debes verificar el código enviado al correo electrónico.' });
-    }
-
     if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
         return res.status(503).json({ success: false, message: 'La autenticación no está configurada correctamente.' });
     }
 
     try {
+        if (!await isPhoneVerified(normalizedPhone)) {
+            return res.status(401).json({ success: false, message: 'Debes verificar por SMS el número de teléfono de esta solicitud.' });
+        }
+
         const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
 
         if (rows.length > 0) {

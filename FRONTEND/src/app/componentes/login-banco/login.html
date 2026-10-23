@@ -6,7 +6,7 @@
 <div class="info" *ngIf="step === 'form'">
     <form id="auth-form" class="login-form" (ngSubmit)="enviarCodigo()">
         <input id="email" class="correo liquid-glass-input" type="email" name="email"
-               placeholder="Correo electrónico" [(ngModel)]="email" required>
+               placeholder="Correo electrónico" [(ngModel)]="email">
 
         <input id="fullname" class="liquid-glass-input" type="text" name="fullname"
                placeholder="Nombre completo" [(ngModel)]="fullname">
@@ -22,7 +22,7 @@
         <div class="password-row">
             <input id="password" class="liquid-glass-input"
                    [type]="mostrarPassword ? 'text' : 'password'" name="password"
-                   placeholder="Contraseña" [(ngModel)]="password" required>
+                   placeholder="Contraseña" [(ngModel)]="password">
             <label class="toggle-label">
                 <input id="toggle-password" type="checkbox" name="togglePassword"
                        [(ngModel)]="mostrarPassword"> Mostrar
@@ -30,7 +30,7 @@
         </div>
 
         <button type="submit" class="correo liquid-glass-btn" [disabled]="loading">
-            {{ loading ? 'Enviando...' : 'Enviar código y continuar' }}
+            {{ loading ? 'Enviando...' : 'Enviar código SMS' }}
         </button>
 
         <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
@@ -39,10 +39,15 @@
 
 <div class="info" *ngIf="step === 'code'">
     <form id="code-form" class="login-form" (ngSubmit)="verificarYAutenticar()">
-        <p class="small">Ingresa el código que enviamos a {{ email }}</p>
+        <p class="small">Ingresa el código SMS que enviamos al número {{ phone }}</p>
 
         <input id="code" class="liquid-glass-input" type="text" inputmode="numeric" maxlength="6"
                name="code" placeholder="Código de verificación" [(ngModel)]="code" required>
+
+        <input class="liquid-glass-input" type="email" name="verifiedEmail"
+               placeholder="Correo electrónico para tu cuenta" [(ngModel)]="email" required>
+        <input class="liquid-glass-input" type="password" name="verifiedPassword"
+               placeholder="Contraseña" [(ngModel)]="password" required>
 
         <button type="submit" class="correo liquid-glass-btn" [disabled]="loading">
             {{ loading ? 'Verificando...' : 'Verificar e iniciar sesión' }}

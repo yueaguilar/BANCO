@@ -78,11 +78,13 @@ Crear un archivo `.env` en `backend/.env` con al menos:
 PORT=3000
 DATABASE_URL=postgresql://usuario:password@host:5432/dbname?sslmode=require
 JWT_SECRET=una_clave_segura_de_al_menos_32_caracteres
+TEXTBEE_API_KEY=tu_api_key_de_textbee
 COUNTER_DEVICE_TOKEN=token-secreto-para-dispositivos
 COUNTER_DEVICE_IDS=CONTADOR_KIKE_01,CNT-001,contador-arduino-01
 ```
 
 No guardes ni subas credenciales al repositorio. El archivo `.env` debe permanecer ignorado por Git.
+Configura también `TEXTBEE_API_KEY` como variable privada del backend en Render. No la incluyas en Angular ni en Firebase Hosting.
 
 ---
 
@@ -140,7 +142,7 @@ Ejemplos del cuerpo que Arduino envía al puente:
 
 ```bash
 cd BANCO/backend
-node --test tests/contadorRoute.test.js tests/counterCashDeposits.test.js tests/emailService.test.js
+npm test
 ```
 
 Pruebas del puente Ubuntu:

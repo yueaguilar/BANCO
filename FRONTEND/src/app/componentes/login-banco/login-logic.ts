@@ -72,19 +72,10 @@ export function iniciarLogin(): void {
       const password =
         passwordInput.value;
 
-      if (!email || !password) {
-
-        alert(
-          'Correo y contraseña son obligatorios.'
-        );
-
-        return;
-      }
-
       if (phone.length < 10) {
 
         alert(
-          'Debes ingresar un número de celular válido para recibir el código de verificación.'
+          'Debes ingresar un número de celular válido para recibir el código SMS.'
         );
 
         return;
@@ -101,8 +92,7 @@ export function iniciarLogin(): void {
             },
 
             body: JSON.stringify({
-              phone,
-              email
+              phone
             })
           });
 
@@ -138,11 +128,6 @@ export function iniciarLogin(): void {
         localStorage.setItem(
           'verificationPhone',
           phone
-        );
-
-        localStorage.setItem(
-          'verificationEmail',
-          email
         );
 
         window.location.href =

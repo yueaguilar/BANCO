@@ -17,7 +17,7 @@ interface AuthResponse extends ApiResponse {
 import { API_URL } from '../../api-config';
 
 export function iniciarVerificacion(): void {
-  const verificationEmailEl = document.getElementById('verification-email');
+  const verificationPhoneEl = document.getElementById('verification-phone');
   const verificationCodeInput = document.getElementById('verification-code') as HTMLInputElement | null;
   const verificationForm = document.getElementById('verification-form');
   const resendBtn = document.getElementById('resend-code');
@@ -25,10 +25,9 @@ export function iniciarVerificacion(): void {
 
   const pendingAuth: PendingAuth | null = JSON.parse(localStorage.getItem('pendingAuth') || 'null');
   const phone = localStorage.getItem('verificationPhone') || pendingAuth?.phone || '';
-  const email = localStorage.getItem('verificationEmail') || pendingAuth?.email || '';
 
-  if (verificationEmailEl) {
-    verificationEmailEl.textContent = email || 'correo no disponible';
+  if (verificationPhoneEl) {
+    verificationPhoneEl.textContent = phone || 'teléfono no disponible';
   }
 
   const setStatus = (message: string, isError = false): void => {
@@ -41,8 +40,8 @@ export function iniciarVerificacion(): void {
     error instanceof Error ? error.message : '';
 
   const sendCode = async (): Promise<void> => {
-    if (!email) {
-      setStatus('No hay un correo electrónico disponible para verificar.', true);
+    if (!phone) {
+      setStatus('No hay un número de teléfono disponible para verificar.', true);
       return;
     }
 
@@ -50,7 +49,7 @@ export function iniciarVerificacion(): void {
       const response = await fetch(`${API_URL}/api/verification/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, email })
+        body: JSON.stringify({ phone })
       });
 
       const data: ApiResponse = await response.json();
@@ -58,7 +57,7 @@ export function iniciarVerificacion(): void {
         throw new Error(data.message || 'No se pudo reenviar el código.');
       }
 
-      setStatus('Se reenvió el código correctamente. Revisa tu correo para ingresarlo manualmente.');
+      setStatus('Se envió un nuevo código SMS al teléfono indicado.');
     } catch (error) {
       console.error(error);
       setStatus(getErrorMessage(error) || 'Hubo un problema al reenviar el código.', true);
@@ -80,7 +79,7 @@ export function iniciarVerificacion(): void {
       event.preventDefault();
       const code = verificationCodeInput?.value.trim() || '';
 
-      if (!email || !code || code.length !== 6) {
+      if (!phone || !code || code.length !== 6) {
         setStatus('Ingresa un código de 6 dígitos válido.', true);
         return;
       }
@@ -89,7 +88,7 @@ export function iniciarVerificacion(): void {
         const response = await fetch(`${API_URL}/api/verification/verify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, phone, code })
+          body: JSON.stringify({ phone, code })
         });
 
         const data: ApiResponse = await response.json();
@@ -108,7 +107,7 @@ export function iniciarVerificacion(): void {
           body: JSON.stringify({
             ...pending,
             phone,
-            email
+            email: pending.email
           })
         });
 
@@ -125,7 +124,6 @@ export function iniciarVerificacion(): void {
         if (authData.bankData) localStorage.setItem('bankData', JSON.stringify(authData.bankData));
         localStorage.removeItem('pendingAuth');
         localStorage.removeItem('verificationPhone');
-        localStorage.removeItem('verificationEmail');
 
         setStatus('Verificación exitosa. Redirigiendo...');
         window.location.href = '/app';
@@ -136,9 +134,9 @@ export function iniciarVerificacion(): void {
     });
   }
 
-  if (email) {
+  if (phone) {
     sendCode();
   } else {
-    setStatus('No se encontró un correo para esta sesión.', true);
+    setStatus('No se encontró un teléfono para esta sesión.', true);
   }
 }

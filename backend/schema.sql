@@ -10,6 +10,15 @@ CREATE TABLE IF NOT EXISTS users (
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
 
+CREATE TABLE IF NOT EXISTS phone_verifications (
+    phone VARCHAR(10) PRIMARY KEY,
+    code_hash CHAR(64),
+    expires_at TIMESTAMPTZ,
+    failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
+    last_sent_at TIMESTAMPTZ,
+    verified_until TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS cuentas (
     id SERIAL PRIMARY KEY,
     usuario_id INTEGER NOT NULL,
