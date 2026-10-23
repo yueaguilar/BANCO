@@ -39,9 +39,11 @@ async function sendSms(phone, message) {
         body = null;
     }
 
-    const result = body?.data && typeof body.data === 'object' ? body.data : body;
-    const smsBatchId = result?.smsBatchId;
-    if (!response.ok || result?.success !== true || typeof smsBatchId !== 'string' || !smsBatchId.trim()) {
+    const data = body?.data && typeof body.data === 'object' ? body.data : body;
+    const smsBatchId = data?.smsBatchId ?? body?.smsBatchId;
+    const sendConfirmed = body?.success === true
+        || (body?.success === undefined && data?.success === true);
+    if (!response.ok || !sendConfirmed || typeof smsBatchId !== 'string' || !smsBatchId.trim()) {
         throw new Error(`TextBee rechazó el envío de SMS (HTTP ${response.status}).`);
     }
 

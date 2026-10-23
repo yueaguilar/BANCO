@@ -535,6 +535,60 @@ test('POST /api/depositos/contador/confirmar acredita y registra el movimiento u
   }
 });
 
+test('POST /api/depositos/contador/confirmar revierte la transacción y no expone errores de PostgreSQL', async () => {
+  const operacionId = loteId();
+  let rolledBack = false;
+  pool.connect = async () => ({
+    async query(sql) {
+      const query = String(sql);
+      if (query === 'BEGIN') return { rows: [] };
+      if (query === 'ROLLBACK') {
+        rolledBack = true;
+        return { rows: [] };
+      }
+      if (query.includes('SELECT d.operacion_id')) {
+        return { rows: [{
+          operacion_id: operacionId,
+          cuenta_id: 11,
+          contador_id: 21,
+          denominacion: 100,
+          cantidad_billetes: 20,
+          importe: '2000.00',
+          estado: 'pendiente',
+          saldo_resultante: null,
+          created_at: new Date().toISOString(),
+          numero_cuenta: '1234567890',
+          conteo_creado: new Date().toISOString()
+        }] };
+      }
+      if (query.includes('SELECT saldo FROM cuentas')) return { rows: [{ saldo: '500.00' }] };
+      if (query.includes('UPDATE cuentas SET saldo')) {
+        throw new Error('sensitive PostgreSQL error with token and PIN');
+      }
+      throw new Error(`Unexpected query in test: ${query}`);
+    },
+    release() {}
+  });
+
+  const server = app.listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/depositos/contador/confirmar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${operationToken()}` },
+      body: JSON.stringify({ operacion_id: operacionId })
+    });
+    const body = await response.json();
+    assert.equal(response.status, 500);
+    assert.equal(body.message, 'No se pudo confirmar el depósito.');
+    assert.doesNotMatch(JSON.stringify(body), /sensitive PostgreSQL error|token|PIN/);
+    assert.equal(rolledBack, true);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    pool.connect = originalConnect;
+  }
+});
+
 test('POST /api/depositos/contador/cancelar no actualiza el saldo', async () => {
   const operationId = loteId();
   let accountUpdateAttempted = false;
@@ -600,6 +654,54 @@ test('la API rechaza JSON malformado y cuerpos que exceden el límite', async ()
       method: 'POST',
       headers,
       body: '{"incompleto":'
+    });
+
+    test('POST /api/deposit fue retirado y no acepta datos de tarjeta del cliente', async () => {
+      const server = app.listen(0);
+      await new Promise((resolve) => server.once('listening', resolve));
+
+      try {
+        const response = await fetch(`http://127.0.0.1:${server.address().port}/api/deposit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accountNumber: '1234567890',
+            cardNumber: '4111111111111111',
+            nip: '1234',
+            cvv: '123',
+            amount: 100
+          })
+        });
+        assert.equal(response.status, 404);
+        assert.equal((await response.json()).message, 'Ruta no encontrada.');
+      } finally {
+        await new Promise((resolve) => server.close(resolve));
+      }
+    });
+
+    test('GET /health informa disponibilidad y oculta el detalle de errores de PostgreSQL', async () => {
+      const originalQuery = pool.query;
+      const server = app.listen(0);
+      await new Promise((resolve) => server.once('listening', resolve));
+
+      try {
+        pool.query = async () => ({ rows: [{ '?column?': 1 }] });
+        const healthy = await fetch(`http://127.0.0.1:${server.address().port}/health`);
+        assert.equal(healthy.status, 200);
+        assert.deepEqual(await healthy.json(), { success: true, status: 'ok' });
+
+        pool.query = async () => {
+          throw new Error('sensitive database connection detail');
+        };
+        const unavailable = await fetch(`http://127.0.0.1:${server.address().port}/health`);
+        assert.equal(unavailable.status, 503);
+        const body = await unavailable.json();
+        assert.deepEqual(body, { success: false, status: 'unavailable' });
+        assert.doesNotMatch(JSON.stringify(body), /sensitive database connection detail/);
+      } finally {
+        pool.query = originalQuery;
+        await new Promise((resolve) => server.close(resolve));
+      }
     });
     assert.equal(malformed.status, 400);
     assert.equal((await malformed.json()).message, 'El cuerpo de la solicitud no contiene JSON válido.');

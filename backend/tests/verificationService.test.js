@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { createHmac } = require('node:crypto');
 
+process.env.SMS_CODE_HMAC_SECRET = 'test-sms-hmac-secret-with-at-least-32-characters';
 const pool = require('../src/database');
 const verification = require('../src/services/verificationService');
 
@@ -106,7 +108,10 @@ test('almacena el hash, expira, limita intentos, consume una sola vez y verifica
   await verification.storeVerificationCode(phone, code);
   const record = db.records.get(phone);
   assert.notEqual(record.code_hash, code);
-  assert.match(record.code_hash, /^[a-f0-9]{64}$/);
+  assert.equal(
+    record.code_hash,
+    createHmac('sha256', process.env.SMS_CODE_HMAC_SECRET).update(code).digest('hex')
+  );
   assert.equal(await verification.consumeVerificationCode(phone, '111111'), false);
   assert.equal(await verification.consumeVerificationCode(phone, '222222'), false);
   assert.equal(await verification.consumeVerificationCode(phone, '333333'), false);
@@ -115,6 +120,21 @@ test('almacena el hash, expira, limita intentos, consume una sola vez y verifica
   assert.equal(await verification.consumeVerificationCode(phone, code), false);
   assert.equal(record.failed_attempts, 5);
   assert.equal(await verification.isPhoneVerified(phone), false);
+});
+
+test('rechaza almacenar códigos si falta la clave secreta de HMAC', async (t) => {
+  const db = makeDatabaseHarness();
+  t.after(db.restore);
+  const secret = process.env.SMS_CODE_HMAC_SECRET;
+  delete process.env.SMS_CODE_HMAC_SECRET;
+  t.after(() => {
+    process.env.SMS_CODE_HMAC_SECRET = secret;
+  });
+
+  await assert.rejects(
+    verification.storeVerificationCode('5512345678', '123456'),
+    /SMS_CODE_HMAC_SECRET/
+  );
 });
 
 test('acepta un código vigente una sola vez y limita los reenvíos', async (t) => {

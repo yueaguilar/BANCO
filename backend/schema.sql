@@ -56,8 +56,13 @@ CREATE TABLE IF NOT EXISTS temporary_nip_attempts (
     failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
     blocked_until TIMESTAMPTZ,
     last_success_at TIMESTAMPTZ,
+    nip_hash TEXT,
+    expires_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE temporary_nip_attempts ADD COLUMN IF NOT EXISTS nip_hash TEXT;
+ALTER TABLE temporary_nip_attempts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS contador_intentos_nip (
     dispositivo_id VARCHAR(100) NOT NULL,

@@ -42,7 +42,7 @@ function authenticateDevice(req, res, next) {
 }
 
 function respondWithDatabaseError(res, error, message) {
-    console.error(message, error);
+    console.error(message, error?.code || error?.name || 'unknown');
     return res.status(500).json({ success: false, message });
 }
 
@@ -327,7 +327,7 @@ router.post('/api/depositos/contador/confirmar', authenticateUser, async (req, r
         try {
             await client.query('ROLLBACK');
         } catch (rollbackError) {
-            console.error('Error revirtiendo la transacción del depósito:', rollbackError);
+            console.error('Error revirtiendo la transacción del depósito:', rollbackError?.code || rollbackError?.name || 'unknown');
         }
         return respondWithDatabaseError(res, error, 'No se pudo confirmar el depósito.');
     } finally {

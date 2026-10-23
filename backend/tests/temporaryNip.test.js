@@ -38,12 +38,17 @@ async function createRig() {
                     attempts.set(userId, {
                         failed_attempts: 0,
                         blocked_until: null,
-                        last_success_at: null
+                        last_success_at: null,
+                        nip_hash: null,
+                        expires_at: null
                     });
                 }
                 return { rows: [] };
             }
             if (query.includes('SELECT failed_attempts, blocked_until, last_success_at')) {
+                return { rows: [attempts.get(userId)] };
+            }
+            if (query.includes('SELECT failed_attempts, blocked_until, nip_hash, expires_at')) {
                 return { rows: [attempts.get(userId)] };
             }
             if (query.includes('SET failed_attempts = CASE')) {
@@ -53,7 +58,7 @@ async function createRig() {
                 state.blocked_until = state.failed_attempts >= params[1]
                     ? new Date(Date.now() + params[2])
                     : null;
-                return { rows: [state] };
+                return { rows: [{ blocked_until: state.blocked_until }] };
             }
             if (query.includes('SET failed_attempts = 0, blocked_until = NULL, updated_at = NOW()')) {
                 const state = attempts.get(userId);
@@ -61,11 +66,27 @@ async function createRig() {
                 state.blocked_until = null;
                 return { rows: [] };
             }
-            if (query.includes('SET failed_attempts = 0, blocked_until = NULL, last_success_at = NOW()')) {
+            if (query.includes('last_success_at = NOW()')) {
                 const state = attempts.get(userId);
                 state.failed_attempts = 0;
                 state.blocked_until = null;
                 state.last_success_at = new Date();
+                state.nip_hash = params[1];
+                state.expires_at = new Date(Date.now() + 5 * 60_000);
+                return { rows: [] };
+            }
+            if (query.includes('SET nip_hash = NULL, expires_at = NULL, failed_attempts = 0')) {
+                const state = attempts.get(userId);
+                state.nip_hash = null;
+                state.expires_at = null;
+                state.failed_attempts = 0;
+                state.blocked_until = null;
+                return { rows: [] };
+            }
+            if (query.includes('SET nip_hash = NULL, expires_at = NULL, updated_at = NOW()')) {
+                const state = attempts.get(userId);
+                state.nip_hash = null;
+                state.expires_at = null;
                 return { rows: [] };
             }
             throw new Error(`Unexpected client query: ${query}`);
@@ -119,6 +140,64 @@ test('genera un NIP temporal de cuatro dígitos con vigencia de cinco minutos', 
         assert.equal(response.headers.get('cache-control'), 'no-store');
         assert.equal(response.headers.get('pragma'), 'no-cache');
         assert.equal(rig.attempts.get(7).failed_attempts, 0);
+        assert.notEqual(rig.attempts.get(7).nip_hash, body.code);
+        assert.equal(await bcrypt.compare(body.code, rig.attempts.get(7).nip_hash), true);
+    } finally {
+        await rig.close();
+    }
+});
+
+async function consumeTemporaryNip(rig, userId, code) {
+    return fetch(`${rig.url}/api/account/temporary-nip/consume`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${userToken(userId)}`
+        },
+        body: JSON.stringify({ code })
+    });
+}
+
+test('consume el NIP temporal de forma transaccional y no permite reutilizarlo', async () => {
+    const rig = await createRig();
+    try {
+        const generated = await requestTemporaryNip(rig, 7, 'valid-password');
+        const { code } = await generated.json();
+
+        const firstUse = await consumeTemporaryNip(rig, 7, code);
+        assert.equal(firstUse.status, 200);
+
+        const replay = await consumeTemporaryNip(rig, 7, code);
+        assert.equal(replay.status, 401);
+        assert.equal(rig.attempts.get(7).nip_hash, null);
+    } finally {
+        await rig.close();
+    }
+});
+
+test('limita los NIP incorrectos y bloquea temporalmente tras cinco intentos', async () => {
+    const rig = await createRig();
+    try {
+        await requestTemporaryNip(rig, 7, 'valid-password');
+        for (let index = 0; index < 4; index += 1) {
+            assert.equal((await consumeTemporaryNip(rig, 7, '0000')).status, 401);
+        }
+        const fifthAttempt = await consumeTemporaryNip(rig, 7, '0000');
+        assert.equal(fifthAttempt.status, 429);
+        assert.ok(Number(fifthAttempt.headers.get('retry-after')) > 0);
+        assert.equal((await consumeTemporaryNip(rig, 7, '0000')).status, 429);
+    } finally {
+        await rig.close();
+    }
+});
+
+test('rechaza un NIP temporal vencido', async () => {
+    const rig = await createRig();
+    try {
+        await requestTemporaryNip(rig, 7, 'valid-password');
+        rig.attempts.get(7).expires_at = new Date(Date.now() - 1);
+        assert.equal((await consumeTemporaryNip(rig, 7, '0000')).status, 401);
+        assert.equal(rig.attempts.get(7).nip_hash, null);
     } finally {
         await rig.close();
     }

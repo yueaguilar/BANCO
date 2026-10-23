@@ -22,7 +22,7 @@ test('sendSms utiliza el encabezado privado y el formato requerido por TextBee',
     return {
       ok: true,
       status: 200,
-      json: async () => ({ data: { success: true, smsBatchId: 'batch-123' } })
+      json: async () => ({ success: true, data: { smsBatchId: 'batch-123' } })
     };
   };
 

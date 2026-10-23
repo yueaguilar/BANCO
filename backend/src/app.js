@@ -10,9 +10,7 @@ const {
     generateCardNumber,
     generateNip,
     hashNip,
-    verifyNip,
-    generateExpirationDate,
-    generateCvv
+    generateExpirationDate
 } = require('./services/cardGenerator');
 const {
     generateVerificationCode,
@@ -35,11 +33,19 @@ const TEMPORARY_NIP_TTL_MS = 5 * 60 * 1000;
 const TEMPORARY_NIP_FAILURE_LIMIT = 5;
 const TEMPORARY_NIP_LOCK_MS = 15 * 60 * 1000;
 const TEMPORARY_NIP_SUCCESS_INTERVAL_MS = 60 * 1000;
-// This in-memory store requires the API to run as a single instance.
-const temporaryNips = new Map();
 
 app.use(cors());
 app.use(express.json({ limit: '16kb' }));
+
+app.get('/health', async (_req, res) => {
+    try {
+        await pool.query('SELECT 1');
+        return res.json({ success: true, status: 'ok' });
+    } catch (error) {
+        console.error('Health check database query failed.');
+        return res.status(503).json({ success: false, status: 'unavailable' });
+    }
+});
 
 async function generateSecureNip() {
     const nip = generateNip();
@@ -110,9 +116,13 @@ async function ensureTables() {
                 failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
                 blocked_until TIMESTAMPTZ,
                 last_success_at TIMESTAMPTZ,
+                nip_hash TEXT,
+                expires_at TIMESTAMPTZ,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         `);
+        await pool.query('ALTER TABLE temporary_nip_attempts ADD COLUMN IF NOT EXISTS nip_hash TEXT');
+        await pool.query('ALTER TABLE temporary_nip_attempts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ');
 
         await pool.query(`
             CREATE TABLE IF NOT EXISTS contador_intentos_nip (
@@ -210,7 +220,7 @@ async function ensureTables() {
 
         console.log('Tablas verificadas');
     } catch (err) {
-        console.error('Error ensuring tables:', err);
+        console.error('Error ensuring tables:', err?.code || err?.name || 'unknown');
         throw err;
     }
 }
@@ -252,7 +262,7 @@ async function createBankAccountForUser(userId) {
         };
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Error creando cuenta/tarjeta:', err);
+        console.error('Error creando cuenta/tarjeta:', err?.code || err?.name || 'unknown');
         throw err;
     } finally {
         client.release();
@@ -328,7 +338,7 @@ app.get('/api/session', authenticateUser, async (req, res) => {
 
         return res.json({ success: true, ...session });
     } catch (err) {
-        console.error('Session fetch error:', err);
+        console.error('Session fetch error:', err?.code || err?.name || 'unknown');
         return res.status(500).json({ success: false, message: 'Error obteniendo la sesión' });
     }
 });
@@ -346,7 +356,7 @@ app.get('/api/movimientos', authenticateUser, async (req, res) => {
         );
         return res.json({ success: true, data: rows });
     } catch (err) {
-        console.error('Movement history fetch error:', err);
+        console.error('Movement history fetch error:', err?.code || err?.name || 'unknown');
         return res.status(500).json({ success: false, message: 'Error consultando los movimientos' });
     }
 });
@@ -460,24 +470,20 @@ app.post('/api/account/temporary-nip', authenticateUser, async (req, res) => {
         }
 
         const code = String(randomInt(0, 10000)).padStart(4, '0');
-        const expiresAt = Date.now() + TEMPORARY_NIP_TTL_MS;
+        const nipHash = await bcrypt.hash(code, 12);
         await client.query(
             `UPDATE temporary_nip_attempts
-             SET failed_attempts = 0, blocked_until = NULL, last_success_at = NOW(), updated_at = NOW()
+             SET failed_attempts = 0,
+                 blocked_until = NULL,
+                 last_success_at = NOW(),
+                 nip_hash = $2,
+                 expires_at = NOW() + INTERVAL '5 minutes',
+                 updated_at = NOW()
              WHERE user_id = $1`,
-            [req.user.id]
+            [req.user.id, nipHash]
         );
         await client.query('COMMIT');
         transactionStarted = false;
-
-        const existing = temporaryNips.get(req.user.id);
-        if (existing) clearTimeout(existing.expirationTimer);
-        const expirationTimer = setTimeout(() => {
-            const current = temporaryNips.get(req.user.id);
-            if (current?.expiresAt === expiresAt) temporaryNips.delete(req.user.id);
-        }, TEMPORARY_NIP_TTL_MS);
-        expirationTimer.unref?.();
-        temporaryNips.set(req.user.id, { code, expiresAt, expirationTimer });
 
         return res.json({
             success: true,
@@ -489,11 +495,115 @@ app.post('/api/account/temporary-nip', authenticateUser, async (req, res) => {
             try {
                 await client.query('ROLLBACK');
             } catch (rollbackError) {
-                console.error('Temporary NIP transaction rollback failed:', rollbackError);
+                console.error('Temporary NIP transaction rollback failed:', rollbackError?.code || rollbackError?.name || 'unknown');
             }
         }
-        console.error('Temporary NIP request error:', error);
+        console.error('Temporary NIP request error:', error?.code || error?.name || 'unknown');
         return res.status(500).json({ success: false, message: 'No se pudo consultar el NIP temporal.' });
+    } finally {
+        client?.release();
+    }
+});
+
+app.post('/api/account/temporary-nip/consume', authenticateUser, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.set('Pragma', 'no-cache');
+
+    const code = req.body?.code;
+    if (typeof code !== 'string' || !/^\d{4}$/.test(code)) {
+        return res.status(400).json({ success: false, message: 'Ingresa un NIP temporal de cuatro dígitos.' });
+    }
+
+    let client;
+    let transactionStarted = false;
+    try {
+        client = await pool.connect();
+        await client.query('BEGIN');
+        transactionStarted = true;
+        await client.query(
+            'INSERT INTO temporary_nip_attempts (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING',
+            [req.user.id]
+        );
+        const result = await client.query(
+            `SELECT failed_attempts, blocked_until, nip_hash, expires_at
+             FROM temporary_nip_attempts
+             WHERE user_id = $1
+             FOR UPDATE`,
+            [req.user.id]
+        );
+        const attempt = result.rows[0];
+        const blockedUntil = attempt?.blocked_until ? new Date(attempt.blocked_until).getTime() : 0;
+        if (blockedUntil > Date.now()) {
+            await client.query('COMMIT');
+            transactionStarted = false;
+            res.set('Retry-After', String(Math.ceil((blockedUntil - Date.now()) / 1000)));
+            return res.status(429).json({ success: false, message: 'NIP bloqueado temporalmente. Inténtalo más tarde.' });
+        }
+
+        const expiresAt = attempt?.expires_at ? new Date(attempt.expires_at).getTime() : 0;
+        if (!attempt?.nip_hash || expiresAt <= Date.now()) {
+            if (attempt?.nip_hash) {
+                await client.query(
+                    `UPDATE temporary_nip_attempts
+                     SET nip_hash = NULL, expires_at = NULL, updated_at = NOW()
+                     WHERE user_id = $1`,
+                    [req.user.id]
+                );
+            }
+            await client.query('COMMIT');
+            transactionStarted = false;
+            return res.status(401).json({ success: false, message: 'El NIP temporal es inválido o expiró.' });
+        }
+
+        if (!await bcrypt.compare(code, attempt.nip_hash)) {
+            const failedAttempt = await client.query(
+                `UPDATE temporary_nip_attempts
+                 SET failed_attempts = CASE
+                         WHEN blocked_until IS NOT NULL AND blocked_until <= NOW() THEN 1
+                         ELSE failed_attempts + 1
+                     END,
+                     blocked_until = CASE
+                         WHEN CASE
+                             WHEN blocked_until IS NOT NULL AND blocked_until <= NOW() THEN 1
+                             ELSE failed_attempts + 1
+                         END >= $2
+                         THEN NOW() + ($3 * INTERVAL '1 millisecond')
+                         ELSE NULL
+                     END,
+                     updated_at = NOW()
+                 WHERE user_id = $1
+                 RETURNING blocked_until`,
+                [req.user.id, TEMPORARY_NIP_FAILURE_LIMIT, TEMPORARY_NIP_LOCK_MS]
+            );
+            await client.query('COMMIT');
+            transactionStarted = false;
+            const lockUntil = failedAttempt.rows[0]?.blocked_until;
+            if (lockUntil && new Date(lockUntil).getTime() > Date.now()) {
+                res.set('Retry-After', String(Math.ceil((new Date(lockUntil).getTime() - Date.now()) / 1000)));
+                return res.status(429).json({ success: false, message: 'Demasiados intentos fallidos. Inténtalo de nuevo en 15 minutos.' });
+            }
+            return res.status(401).json({ success: false, message: 'El NIP temporal es inválido o expiró.' });
+        }
+
+        await client.query(
+            `UPDATE temporary_nip_attempts
+             SET nip_hash = NULL, expires_at = NULL, failed_attempts = 0, blocked_until = NULL, updated_at = NOW()
+             WHERE user_id = $1`,
+            [req.user.id]
+        );
+        await client.query('COMMIT');
+        transactionStarted = false;
+        return res.json({ success: true, message: 'NIP temporal consumido correctamente.' });
+    } catch (error) {
+        if (client && transactionStarted) {
+            try {
+                await client.query('ROLLBACK');
+            } catch (rollbackError) {
+                console.error('Temporary NIP consumption rollback failed:', rollbackError?.code || rollbackError?.name || 'unknown');
+            }
+        }
+        console.error('Temporary NIP consumption failed.');
+        return res.status(500).json({ success: false, message: 'No se pudo validar el NIP temporal.' });
     } finally {
         client?.release();
     }
@@ -639,72 +749,8 @@ app.post('/api/auth', async (req, res) => {
             bankData
         });
     } catch (err) {
-        console.error('Auth error:', err);
+        console.error('Auth error:', err?.code || err?.name || 'unknown');
         return res.status(500).json({ success: false, message: 'Error del servidor' });
-    }
-});
-
-app.post('/api/deposit', async (req, res) => {
-    const {
-        accountNumber,
-        cardNumber,
-        expirationMonth,
-        expirationYear,
-        nip,
-        cvv,
-        amount
-    } = req.body;
-
-    if (!accountNumber || !cardNumber || !nip || !cvv || !amount) {
-        return res.status(400).json({ success: false, message: 'Faltan datos para realizar el depósito' });
-    }
-
-    try {
-        const { rows } = await pool.query(
-            `SELECT c.id, c.numero_cuenta, c.saldo, t.numero_tarjeta, t.mes_expiracion, t.anio_expiracion, t.nip_hash
-             FROM cuentas c
-             INNER JOIN tarjetas t ON t.cuenta_id = c.id
-             WHERE c.numero_cuenta = $1`,
-            [accountNumber]
-        );
-
-        if (rows.length === 0) {
-            return res.status(404).json({ success: false, message: 'Cuenta no encontrada' });
-        }
-
-        const cuenta = rows[0];
-        const isNipValid = await verifyNip(String(nip), cuenta.nip_hash);
-        const isCardValid = String(cuenta.numero_tarjeta) === String(cardNumber);
-        const isExpirationValid = Number(cuenta.mes_expiracion) === Number(expirationMonth)
-            && Number(cuenta.anio_expiracion) === Number(expirationYear);
-
-        // Validate CVV against current and previous time window
-        const expectedCvvNow = generateCvv(String(cuenta.numero_tarjeta), Number(cuenta.mes_expiracion), Number(cuenta.anio_expiracion), 0);
-        const expectedCvvPrev = generateCvv(String(cuenta.numero_tarjeta), Number(cuenta.mes_expiracion), Number(cuenta.anio_expiracion), -1);
-        const isCvvValid = String(cvv) === String(expectedCvvNow) || String(cvv) === String(expectedCvvPrev);
-
-        if (!isCardValid || !isExpirationValid || !isNipValid || !isCvvValid) {
-            return res.status(401).json({ success: false, message: 'Datos de la tarjeta inválidos para el depósito' });
-        }
-
-        const monto = Number(amount);
-        if (!Number.isFinite(monto) || monto <= 0) {
-            return res.status(400).json({ success: false, message: 'El monto debe ser mayor a cero' });
-        }
-
-        const actualizado = await pool.query(
-            'UPDATE cuentas SET saldo = saldo + $1 WHERE id = $2 RETURNING saldo',
-            [monto, cuenta.id]
-        );
-
-        return res.json({
-            success: true,
-            message: 'Depósito realizado con éxito',
-            saldo: Number(actualizado.rows[0].saldo)
-        });
-    } catch (err) {
-        console.error('Deposit error:', err);
-        return res.status(500).json({ success: false, message: 'Error procesando el depósito' });
     }
 });
 
@@ -732,7 +778,7 @@ app.get('/api/balance/:numeroCuenta', authenticateUser, async (req, res) => {
             saldo: Number(rows[0].saldo)
         });
     } catch (err) {
-        console.error('Balance error:', err);
+        console.error('Balance error:', err?.code || err?.name || 'unknown');
         return res.status(500).json({ success: false, message: 'Error consultando el saldo' });
     }
 });
@@ -742,7 +788,7 @@ app.use((_req, res) => {
 });
 
 app.use((error, _req, res, _next) => {
-    console.error('Request processing error:', error);
+    console.error('Request processing error:', error?.type || error?.code || error?.name || 'unknown');
     if (error.type === 'entity.too.large') {
         return res.status(413).json({ success: false, message: 'La solicitud excede el tamaño permitido.' });
     }
@@ -763,10 +809,15 @@ if (require.main === module) {
     )];
     const invalidDeviceIds = configuredDevices.some((id) => !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(id));
     const requiredConfig = [
+        ['TEXTBEE_API_KEY', process.env.TEXTBEE_API_KEY, 1],
         ['JWT_SECRET', process.env.JWT_SECRET, 32],
         ['COUNTER_DEVICE_TOKEN', process.env.COUNTER_DEVICE_TOKEN, 32],
+        ['SMS_CODE_HMAC_SECRET', process.env.SMS_CODE_HMAC_SECRET, 32],
         ['COUNTER_DEVICE_IDS', configuredDevices.join(','), 1]
     ];
+    if (process.env.NODE_ENV === 'production') {
+        requiredConfig.push(['DATABASE_URL', process.env.DATABASE_URL, 1]);
+    }
     const missingConfig = requiredConfig
         .filter(([name, value, minLength]) => !value || String(value).trim().length < minLength)
         .map(([name]) => name);
@@ -786,7 +837,7 @@ if (require.main === module) {
             });
         })
         .catch((err) => {
-            console.error('Error inicializando la aplicación:', err);
+            console.error('Error inicializando la aplicación:', err?.code || err?.name || 'unknown');
             process.exit(1);
         });
 }

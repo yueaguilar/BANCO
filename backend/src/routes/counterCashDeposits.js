@@ -59,7 +59,7 @@ function matchesDeposit(existing, session, body, declared, detected) {
 }
 
 function respondWithDatabaseError(res, error, message) {
-    console.error(message, error);
+    console.error(message, error?.code || error?.name || 'unknown');
     return res.status(500).json({ success: false, message });
 }
 
@@ -163,7 +163,7 @@ router.post('/api/contador/depositos/autenticar', authenticateDevice, async (req
             try {
                 await client.query('ROLLBACK');
             } catch (rollbackError) {
-                console.error('Error revirtiendo autenticación del contador:', rollbackError);
+                console.error('Error revirtiendo autenticación del contador:', rollbackError?.code || rollbackError?.name || 'unknown');
             }
         }
         return respondWithDatabaseError(res, error, 'No se pudo autenticar la cuenta del depósito.');
@@ -269,7 +269,7 @@ router.post('/api/contador/depositos/preparar', authenticateDevice, getCounterSe
             try {
                 await client.query('ROLLBACK');
             } catch (rollbackError) {
-                console.error('Error revirtiendo preparación del depósito:', rollbackError);
+                console.error('Error revirtiendo preparación del depósito:', rollbackError?.code || rollbackError?.name || 'unknown');
             }
         }
         return respondWithDatabaseError(res, error, 'No se pudo preparar el depósito.');
@@ -367,7 +367,7 @@ router.post('/api/contador/depositos/confirmar', authenticateDevice, getCounterS
             try {
                 await client.query('ROLLBACK');
             } catch (rollbackError) {
-                console.error('Error revirtiendo confirmación del contador:', rollbackError);
+                console.error('Error revirtiendo confirmación del contador:', rollbackError?.code || rollbackError?.name || 'unknown');
             }
         }
         return respondWithDatabaseError(res, error, 'No se pudo confirmar el depósito.');

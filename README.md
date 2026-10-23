@@ -79,12 +79,13 @@ PORT=3000
 DATABASE_URL=postgresql://usuario:password@host:5432/dbname?sslmode=require
 JWT_SECRET=una_clave_segura_de_al_menos_32_caracteres
 TEXTBEE_API_KEY=tu_api_key_de_textbee
+SMS_CODE_HMAC_SECRET=configurar_como_secreto_privado_de_al_menos_32_bytes
 COUNTER_DEVICE_TOKEN=token-secreto-para-dispositivos
 COUNTER_DEVICE_IDS=CONTADOR_KIKE_01,CNT-001,contador-arduino-01
 ```
 
 No guardes ni subas credenciales al repositorio. El archivo `.env` debe permanecer ignorado por Git.
-Configura también `TEXTBEE_API_KEY` como variable privada del backend en Render. No la incluyas en Angular ni en Firebase Hosting.
+En producción, configura `DATABASE_URL`, `JWT_SECRET`, `COUNTER_DEVICE_TOKEN`, `COUNTER_DEVICE_IDS`, `TEXTBEE_API_KEY` y `SMS_CODE_HMAC_SECRET` en las variables privadas del servicio backend en Render. `JWT_SECRET`, `COUNTER_DEVICE_TOKEN` y `SMS_CODE_HMAC_SECRET` deben tener al menos 32 caracteres; genera valores aleatorios para los secretos. No los incluyas en Angular ni en Firebase Hosting.
 
 ---
 
@@ -93,8 +94,11 @@ Configura también `TEXTBEE_API_KEY` como variable privada del backend en Render
 Rutas relevantes:
 
 - `POST /api/auth` — registro e inicio de sesión
+- `GET /health` — comprobación de disponibilidad de la API y PostgreSQL
 - `GET /api/session` — sesión autenticada del usuario actual
 - `GET /api/balance/:numeroCuenta` — consulta del saldo solo para la cuenta propia
+- `POST /api/account/temporary-nip` — emite un NIP temporal tras verificar la contraseña
+- `POST /api/account/temporary-nip/consume` — valida y consume el NIP temporal una sola vez
 - `POST /api/contador` — registro del contador autorizado
 - `GET /api/contador/pendientes` — conteos pendientes para validación
 - `POST /api/depositos/contador/validar` — valida cuenta, contador y denominación
@@ -115,6 +119,8 @@ Rutas relevantes:
 6. El puente devuelve la respuesta backend e incluye `accepted: true` o `accepted: false`. Las solicitudes de autenticación y confirmación se envían de forma síncrona y no se guardan en la cola persistente del puente.
 
 Las tres rutas del puente requieren `x-bridge-token`, y el backend requiere además el token del dispositivo configurado y autorizado. Para iniciar el puente se deben configurar `BACKEND_URL` (HTTPS), `BRIDGE_INGEST_TOKEN`, `COUNTER_DEVICE_TOKEN` y `COUNTER_DEVICE_IDS`.
+
+La antigua ruta `POST /api/deposit` fue retirada: el frontend no la utiliza. Los depósitos de cliente se realizan únicamente con el flujo autenticado del contador; el backend verifica la propiedad de la cuenta, el conteo autorizado, la idempotencia y registra el saldo y el movimiento dentro de una transacción PostgreSQL.
 
 Ejemplos del cuerpo que Arduino envía al puente:
 

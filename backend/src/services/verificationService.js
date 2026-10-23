@@ -1,4 +1,4 @@
-const { createHash, randomInt, timingSafeEqual } = require('node:crypto');
+const { createHmac, randomInt, timingSafeEqual } = require('node:crypto');
 const pool = require('../database');
 
 const CODE_TTL_MS = 5 * 60 * 1000;
@@ -38,7 +38,11 @@ function normalizePhone(phone) {
 }
 
 function hashCode(code) {
-    return createHash('sha256').update(String(code)).digest('hex');
+    const secret = process.env.SMS_CODE_HMAC_SECRET;
+    if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32) {
+        throw new Error('SMS_CODE_HMAC_SECRET debe contener al menos 32 bytes.');
+    }
+    return createHmac('sha256', secret).update(String(code)).digest('hex');
 }
 
 async function storeVerificationCode(phone, code) {

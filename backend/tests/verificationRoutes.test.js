@@ -11,12 +11,14 @@ async function createRig(t) {
   const originalFetch = global.fetch;
   const originalApiKey = process.env.TEXTBEE_API_KEY;
   const originalJwtSecret = process.env.JWT_SECRET;
+  const originalHmacSecret = process.env.SMS_CODE_HMAC_SECRET;
   const records = new Map();
   const authQueries = [];
   const passwordHash = await bcrypt.hash('valid-password', 4);
 
   process.env.TEXTBEE_API_KEY = 'route-test-key';
   process.env.JWT_SECRET = 'route-test-secret-with-at-least-32-characters';
+  process.env.SMS_CODE_HMAC_SECRET = 'route-test-hmac-secret-with-at-least-32-characters';
   pool.query = async (sql, params = []) => {
     const query = String(sql);
     if (query.includes('INSERT INTO phone_verifications')) {
@@ -57,6 +59,9 @@ async function createRig(t) {
     }
     authQueries.push(query);
     if (query.includes('SELECT * FROM users WHERE email = $1')) {
+      if (params[0] === 'nuevo@example.com') {
+        return { rows: [] };
+      }
       return {
         rows: [{
           id: 1,
@@ -66,6 +71,9 @@ async function createRig(t) {
           password: passwordHash
         }]
       };
+    }
+    if (query.includes('INSERT INTO users(')) {
+      return { rows: [{ id: 2 }] };
     }
     if (query.includes('FROM cuentas c')) {
       return {
@@ -101,6 +109,19 @@ async function createRig(t) {
         record.verified_until = Date.now() + 10 * 60_000;
         return { rows: [] };
       }
+      if (query.includes('INSERT INTO cuentas')) {
+        return { rows: [{ id: 10, numero_cuenta: params[1], saldo: '0.00' }] };
+      }
+      if (query.includes('INSERT INTO tarjetas')) {
+        return {
+          rows: [{
+            id: 11,
+            numero_tarjeta: params[1],
+            mes_expiracion: params[2],
+            anio_expiracion: params[3]
+          }]
+        };
+      }
       throw new Error(`Unexpected client query: ${query}`);
     },
     release() {}
@@ -116,6 +137,8 @@ async function createRig(t) {
     else process.env.TEXTBEE_API_KEY = originalApiKey;
     if (originalJwtSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = originalJwtSecret;
+    if (originalHmacSecret === undefined) delete process.env.SMS_CODE_HMAC_SECRET;
+    else process.env.SMS_CODE_HMAC_SECRET = originalHmacSecret;
   });
 
   return new Promise((resolve) => {
@@ -241,7 +264,47 @@ test('send route limits repeated SMS requests for the same phone', async (t) => 
 test('send route rejects malformed and non-Mexican phone numbers', async (t) => {
   const rig = await createRig(t);
 
-  const response = await post(rig.fetch, rig.url, '/api/verification/send', { phone: '+1 555 123 4567' });
+  const response = await post(rig.fetch, rig.url, '/api/verification/send', { phone: '+1 555 123 4567'   });
+
+  test('registration requires a verified phone and succeeds after SMS verification', async (t) => {
+    const rig = await createRig(t);
+    let smsBody;
+    global.fetch = async (_url, options) => {
+      smsBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { success: true, smsBatchId: 'registration-batch' } })
+      };
+    };
+
+    const registration = {
+      fullname: 'Nuevo usuario',
+      email: 'nuevo@example.com',
+      birthdate: '2000-01-01',
+      password: 'valid-password',
+      phone: '5511223344'
+    };
+    const unverified = await post(rig.fetch, rig.url, '/api/auth', registration);
+    assert.equal(unverified.status, 401);
+    assert.equal(rig.authQueries.length, 0);
+
+    const sent = await post(rig.fetch, rig.url, '/api/verification/send', { phone: registration.phone });
+    assert.equal(sent.status, 200);
+    const code = smsBody.message.match(/\d{6}/)[0];
+    const verified = await post(rig.fetch, rig.url, '/api/verification/verify', {
+      phone: registration.phone,
+      code
+    });
+    assert.equal(verified.status, 200);
+
+    const registered = await post(rig.fetch, rig.url, '/api/auth', registration);
+    const body = await registered.json();
+    assert.equal(registered.status, 200);
+    assert.equal(body.message, 'Usuario registrado');
+    assert.equal(typeof body.token, 'string');
+    assert.equal(body.user.email, registration.email);
+  });
   assert.equal(response.status, 400);
   const missingPhone = await post(rig.fetch, rig.url, '/api/verification/send', {});
   assert.equal(missingPhone.status, 400);
