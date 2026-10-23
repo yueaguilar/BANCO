@@ -176,6 +176,22 @@ async function isPhoneVerified(phone) {
     return result.rows.length > 0;
 }
 
+async function consumePhoneVerification(phone) {
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) {
+        return false;
+    }
+
+    const result = await pool.query(
+        `UPDATE phone_verifications
+         SET verified_until = NULL
+         WHERE phone = $1 AND verified_until > NOW()
+         RETURNING phone`,
+        [normalizedPhone]
+    );
+    return result.rows.length > 0;
+}
+
 module.exports = {
     CODE_TTL_MS,
     MAX_FAILED_ATTEMPTS,
@@ -186,5 +202,6 @@ module.exports = {
     discardVerificationCode,
     consumeVerificationCode,
     markPhoneVerified,
-    isPhoneVerified
+    isPhoneVerified,
+    consumePhoneVerification
 };

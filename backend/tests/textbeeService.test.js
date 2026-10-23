@@ -22,7 +22,7 @@ test('sendSms utiliza el encabezado privado y el formato requerido por TextBee',
     return {
       ok: true,
       status: 200,
-      json: async () => ({ success: true, smsBatchId: 'batch-123' })
+      json: async () => ({ data: { success: true, smsBatchId: 'batch-123' } })
     };
   };
 
@@ -62,6 +62,70 @@ test('sendSms rechaza respuestas no exitosas sin exponer el mensaje de respuesta
     (error) => {
       assert.match(error.message, /HTTP 401/);
       assert.doesNotMatch(error.message, /secret provider response|test-textbee-key|123456/);
+      return true;
+    }
+  );
+});
+
+test('sendSms rechaza HTTP exitoso cuando TextBee no confirma el envío', async (t) => {
+  const originalFetch = global.fetch;
+  const originalApiKey = process.env.TEXTBEE_API_KEY;
+  t.after(() => {
+    global.fetch = originalFetch;
+    if (originalApiKey === undefined) {
+      delete process.env.TEXTBEE_API_KEY;
+    } else {
+      process.env.TEXTBEE_API_KEY = originalApiKey;
+    }
+  });
+
+  process.env.TEXTBEE_API_KEY = 'test-textbee-key';
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      data: {
+        success: false,
+        smsBatchId: 'private-batch',
+        message: 'Código secreto 123456'
+      }
+    })
+  });
+
+  await assert.rejects(
+    () => sendSms('+521234567890', 'Código 123456'),
+    (error) => {
+      assert.match(error.message, /HTTP 200/);
+      assert.doesNotMatch(error.message, /private-batch|test-textbee-key|123456|Código secreto/);
+      return true;
+    }
+  );
+});
+
+test('sendSms rechaza confirmaciones sin identificador de lote', async (t) => {
+  const originalFetch = global.fetch;
+  const originalApiKey = process.env.TEXTBEE_API_KEY;
+  t.after(() => {
+    global.fetch = originalFetch;
+    if (originalApiKey === undefined) {
+      delete process.env.TEXTBEE_API_KEY;
+    } else {
+      process.env.TEXTBEE_API_KEY = originalApiKey;
+    }
+  });
+
+  process.env.TEXTBEE_API_KEY = 'test-textbee-key';
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ data: { success: true } })
+  });
+
+  await assert.rejects(
+    () => sendSms('+521234567890', 'Código 123456'),
+    (error) => {
+      assert.match(error.message, /HTTP 200/);
+      assert.doesNotMatch(error.message, /test-textbee-key|123456/);
       return true;
     }
   );

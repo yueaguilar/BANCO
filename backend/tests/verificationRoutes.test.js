@@ -47,6 +47,14 @@ async function createRig(t) {
       const record = records.get(params[0]);
       return { rows: record?.verified_until > Date.now() ? [{ verified: 1 }] : [] };
     }
+    if (query.includes('SET verified_until = NULL')) {
+      const record = records.get(params[0]);
+      if (record?.verified_until > Date.now()) {
+        record.verified_until = null;
+        return { rows: [{ phone: params[0] }] };
+      }
+      return { rows: [] };
+    }
     authQueries.push(query);
     if (query.includes('SELECT * FROM users WHERE email = $1')) {
       return {
@@ -136,7 +144,7 @@ test('verification routes use SMS, reject bad/reused codes, and require the veri
     return {
       ok: true,
       status: 200,
-      json: async () => ({ success: true, smsBatchId: 'accepted' })
+      json: async () => ({ data: { success: true, smsBatchId: 'accepted' } })
     };
   };
 
@@ -187,6 +195,13 @@ test('verification routes use SMS, reject bad/reused codes, and require the veri
   assert.equal(loginBody.success, true);
   assert.equal(typeof loginBody.token, 'string');
   assert.equal(loginBody.bankData.numeroCuenta, '1234567890');
+
+  const reusedVerification = await post(rig.fetch, rig.url, '/api/auth', {
+    email: 'demo@example.com',
+    password: 'valid-password',
+    phone: '+52 55 1234 5678'
+  });
+  assert.equal(reusedVerification.status, 401);
 });
 
 test('send route fails when TextBee rejects the SMS', async (t) => {
@@ -212,7 +227,7 @@ test('send route limits repeated SMS requests for the same phone', async (t) => 
     return {
       ok: true,
       status: 200,
-      json: async () => ({ success: true })
+      json: async () => ({ data: { success: true, smsBatchId: 'accepted' } })
     };
   };
 

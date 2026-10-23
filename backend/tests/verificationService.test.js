@@ -39,6 +39,14 @@ function makeDatabaseHarness() {
         rows: record?.verified_until > Date.now() ? [{ '?column?': 1 }] : []
       };
     }
+    if (String(sql).includes('SET verified_until = NULL')) {
+      const record = records.get(params[0]);
+      if (record?.verified_until > Date.now()) {
+        record.verified_until = null;
+        return { rows: [{ phone: params[0] }] };
+      }
+      return { rows: [] };
+    }
     throw new Error(`Unexpected query: ${sql}`);
   };
 
@@ -121,6 +129,9 @@ test('acepta un código vigente una sola vez y limita los reenvíos', async (t) 
   );
   assert.equal(await verification.consumeVerificationCode(phone, '123456'), true);
   assert.equal(await verification.isPhoneVerified(`+52${phone}`), true);
+  assert.equal(await verification.consumePhoneVerification(phone), true);
+  assert.equal(await verification.isPhoneVerified(phone), false);
+  assert.equal(await verification.consumePhoneVerification(phone), false);
   assert.equal(await verification.consumeVerificationCode(phone, '123456'), false);
 });
 

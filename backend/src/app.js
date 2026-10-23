@@ -21,6 +21,7 @@ const {
     discardVerificationCode,
     consumeVerificationCode,
     isPhoneVerified,
+    consumePhoneVerification,
     VerificationRateLimitError
 } = require('./services/verificationService');
 const { sendSms } = require('./services/textbeeService');
@@ -585,6 +586,10 @@ app.post('/api/auth', async (req, res) => {
             const user = rows[0];
             const match = await bcrypt.compare(password, user.password);
             if (match) {
+                if (!await consumePhoneVerification(normalizedPhone)) {
+                    return res.status(401).json({ success: false, message: 'Debes verificar por SMS el número de teléfono de esta solicitud.' });
+                }
+
                 if (normalizedPhone && (!user.phone || user.phone !== normalizedPhone)) {
                     await pool.query('UPDATE users SET phone = $1 WHERE id = $2', [normalizedPhone, user.id]);
                 }
@@ -604,6 +609,10 @@ app.post('/api/auth', async (req, res) => {
         }
 
         const hashed = await bcrypt.hash(password, 10);
+        if (!await consumePhoneVerification(normalizedPhone)) {
+            return res.status(401).json({ success: false, message: 'Debes verificar por SMS el número de teléfono de esta solicitud.' });
+        }
+
         const userInsert = await pool.query(
             'INSERT INTO users(fullname, email, birthdate, password, phone) VALUES($1,$2,$3,$4,$5) RETURNING id',
             [fullname || null, normalizedEmail, birthdate || null, hashed, normalizedPhone]
