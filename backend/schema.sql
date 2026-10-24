@@ -16,8 +16,19 @@ CREATE TABLE IF NOT EXISTS phone_verifications (
     expires_at TIMESTAMPTZ,
     failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
     last_sent_at TIMESTAMPTZ,
-    verified_until TIMESTAMPTZ
+    verified_until TIMESTAMPTZ,
+    verified_purpose VARCHAR(30)
 );
+
+ALTER TABLE phone_verifications ADD COLUMN IF NOT EXISTS verified_purpose VARCHAR(30);
+
+CREATE TABLE IF NOT EXISTS sms_ip_rate_limits (
+    ip_key CHAR(64) PRIMARY KEY,
+    window_started_at TIMESTAMPTZ NOT NULL,
+    request_count INTEGER NOT NULL CHECK (request_count >= 0)
+);
+CREATE INDEX IF NOT EXISTS idx_sms_ip_rate_limits_window
+    ON sms_ip_rate_limits (window_started_at);
 
 CREATE TABLE IF NOT EXISTS cuentas (
     id SERIAL PRIMARY KEY,

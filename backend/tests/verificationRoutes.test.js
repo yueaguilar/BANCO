@@ -13,6 +13,7 @@ async function createRig(t) {
   const originalJwtSecret = process.env.JWT_SECRET;
   const originalHmacSecret = process.env.SMS_CODE_HMAC_SECRET;
   const records = new Map();
+  const ipLimits = new Map();
   const authQueries = [];
   const passwordHash = await bcrypt.hash('valid-password', 4);
 
@@ -21,6 +22,16 @@ async function createRig(t) {
   process.env.SMS_CODE_HMAC_SECRET = 'route-test-hmac-secret-with-at-least-32-characters';
   pool.query = async (sql, params = []) => {
     const query = String(sql);
+    if (query.includes('INSERT INTO sms_ip_rate_limits')) {
+      const ipKey = params[0];
+      const rate = ipLimits.get(ipKey) || {
+        request_count: 0,
+        window_started_at: new Date()
+      };
+      rate.request_count += 1;
+      ipLimits.set(ipKey, rate);
+      return { rows: [{ ...rate }] };
+    }
     if (query.includes('INSERT INTO phone_verifications')) {
       const [phone, codeHash] = params;
       const existing = records.get(phone);
@@ -33,6 +44,7 @@ async function createRig(t) {
         expires_at: new Date(Date.now() + 5 * 60_000),
         failed_attempts: 0,
         verified_until: null,
+        verified_purpose: null,
         lastSentAt: Date.now()
       });
       return { rows: [{ phone }] };
@@ -42,17 +54,24 @@ async function createRig(t) {
       if (record?.code_hash === params[1]) {
         record.code_hash = null;
         record.expires_at = null;
+        record.verified_until = null;
+        record.verified_purpose = null;
       }
       return { rows: [] };
     }
     if (query.includes('SELECT 1 FROM phone_verifications')) {
       const record = records.get(params[0]);
-      return { rows: record?.verified_until > Date.now() ? [{ verified: 1 }] : [] };
+      return {
+        rows: record?.verified_until > Date.now() && record.verified_purpose === params[1]
+          ? [{ verified: 1 }]
+          : []
+      };
     }
     if (query.includes('SET verified_until = NULL')) {
       const record = records.get(params[0]);
-      if (record?.verified_until > Date.now()) {
+      if (record?.verified_until > Date.now() && record.verified_purpose === params[1]) {
         record.verified_until = null;
+        record.verified_purpose = null;
         return { rows: [{ phone: params[0] }] };
       }
       return { rows: [] };
@@ -107,6 +126,7 @@ async function createRig(t) {
         record.code_hash = null;
         record.expires_at = null;
         record.verified_until = Date.now() + 10 * 60_000;
+        record.verified_purpose = params[1];
         return { rows: [] };
       }
       if (query.includes('INSERT INTO cuentas')) {
@@ -146,6 +166,7 @@ async function createRig(t) {
       url: `http://127.0.0.1:${server.address().port}`,
       fetch: originalFetch,
       records,
+      ipLimits,
       authQueries
     }));
   });
@@ -261,51 +282,164 @@ test('send route limits repeated SMS requests for the same phone', async (t) => 
   assert.equal(smsRequests, 1);
 });
 
+test('send route limits SMS requests by IP across distinct phone numbers', async (t) => {
+  const rig = await createRig(t);
+  let smsRequests = 0;
+  global.fetch = async () => {
+    smsRequests += 1;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { smsBatchId: 'accepted' } })
+    };
+  };
+
+  for (let index = 0; index < 5; index += 1) {
+    const response = await post(rig.fetch, rig.url, '/api/verification/send', {
+      phone: `5512345${String(index).padStart(3, '0')}`
+    });
+    assert.equal(response.status, 200);
+  }
+  const blocked = await post(rig.fetch, rig.url, '/api/verification/send', { phone: '5512345999' });
+  assert.equal(blocked.status, 429);
+  assert.ok(Number(blocked.headers.get('retry-after')) > 0);
+  assert.equal(smsRequests, 5);
+});
+
+test('CORS allows only Banco KIKE hosting and local development origins', async (t) => {
+  const rig = await createRig(t);
+  const allowed = await rig.fetch(`${rig.url}/unknown`, {
+    headers: { Origin: 'https://bancokike-45795.web.app' }
+  });
+  assert.equal(allowed.headers.get('access-control-allow-origin'), 'https://bancokike-45795.web.app');
+
+  const local = await rig.fetch(`${rig.url}/unknown`, {
+    headers: { Origin: 'http://localhost:4200' }
+  });
+  assert.equal(local.headers.get('access-control-allow-origin'), 'http://localhost:4200');
+
+  const rejected = await rig.fetch(`${rig.url}/unknown`, {
+    headers: { Origin: 'https://untrusted.example' }
+  });
+  assert.equal(rejected.headers.get('access-control-allow-origin'), null);
+});
+
 test('send route rejects malformed and non-Mexican phone numbers', async (t) => {
   const rig = await createRig(t);
 
-  const response = await post(rig.fetch, rig.url, '/api/verification/send', { phone: '+1 555 123 4567'   });
-
-  test('registration requires a verified phone and succeeds after SMS verification', async (t) => {
-    const rig = await createRig(t);
-    let smsBody;
-    global.fetch = async (_url, options) => {
-      smsBody = JSON.parse(options.body);
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ data: { success: true, smsBatchId: 'registration-batch' } })
-      };
-    };
-
-    const registration = {
-      fullname: 'Nuevo usuario',
-      email: 'nuevo@example.com',
-      birthdate: '2000-01-01',
-      password: 'valid-password',
-      phone: '5511223344'
-    };
-    const unverified = await post(rig.fetch, rig.url, '/api/auth', registration);
-    assert.equal(unverified.status, 401);
-    assert.equal(rig.authQueries.length, 0);
-
-    const sent = await post(rig.fetch, rig.url, '/api/verification/send', { phone: registration.phone });
-    assert.equal(sent.status, 200);
-    const code = smsBody.message.match(/\d{6}/)[0];
-    const verified = await post(rig.fetch, rig.url, '/api/verification/verify', {
-      phone: registration.phone,
-      code
-    });
-    assert.equal(verified.status, 200);
-
-    const registered = await post(rig.fetch, rig.url, '/api/auth', registration);
-    const body = await registered.json();
-    assert.equal(registered.status, 200);
-    assert.equal(body.message, 'Usuario registrado');
-    assert.equal(typeof body.token, 'string');
-    assert.equal(body.user.email, registration.email);
-  });
+  const response = await post(rig.fetch, rig.url, '/api/verification/send', { phone: '+1 555 123 4567' });
   assert.equal(response.status, 400);
   const missingPhone = await post(rig.fetch, rig.url, '/api/verification/send', {});
   assert.equal(missingPhone.status, 400);
+});
+
+test('registration requires a verified phone and succeeds after SMS verification', async (t) => {
+  const rig = await createRig(t);
+  let smsBody;
+  global.fetch = async (_url, options) => {
+    smsBody = JSON.parse(options.body);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { success: true, smsBatchId: 'registration-batch' } })
+    };
+  };
+
+  const registration = {
+    fullname: 'Nuevo usuario',
+    email: 'nuevo@example.com',
+    birthdate: '2000-01-01',
+    password: 'valid-password',
+    phone: '5511223344'
+  };
+  const unverified = await post(rig.fetch, rig.url, '/api/auth', registration);
+  assert.equal(unverified.status, 401);
+  assert.equal(rig.authQueries.length, 0);
+
+  const sent = await post(rig.fetch, rig.url, '/api/verification/send', { phone: registration.phone });
+  assert.equal(sent.status, 200);
+  const code = smsBody.message.match(/\d{6}/)[0];
+  const verified = await post(rig.fetch, rig.url, '/api/verification/verify', {
+    phone: registration.phone,
+    code
+  });
+  assert.equal(verified.status, 200);
+
+  const registered = await post(rig.fetch, rig.url, '/api/auth', registration);
+  const body = await registered.json();
+  assert.equal(registered.status, 200);
+  assert.equal(body.message, 'Usuario registrado');
+  assert.equal(typeof body.token, 'string');
+  assert.equal(body.user.email, registration.email);
+});
+
+test('a phone verification is consumed by one auth attempt even when credentials are wrong', async (t) => {
+  const rig = await createRig(t);
+  let smsBody;
+  global.fetch = async (_url, options) => {
+    smsBody = JSON.parse(options.body);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { smsBatchId: 'single-use' } })
+    };
+  };
+
+  await post(rig.fetch, rig.url, '/api/verification/send', { phone: '5512345678' });
+  const code = smsBody.message.match(/\d{6}/)[0];
+  const verified = await post(rig.fetch, rig.url, '/api/verification/verify', {
+    phone: '5512345678',
+    code
+  });
+  assert.equal(verified.status, 200);
+
+  const invalidCredentials = await post(rig.fetch, rig.url, '/api/auth', {
+    email: 'demo@example.com',
+    password: 'wrong-password',
+    phone: '5512345678'
+  });
+  assert.equal(invalidCredentials.status, 401);
+
+  const replayedProof = await post(rig.fetch, rig.url, '/api/auth', {
+    email: 'demo@example.com',
+    password: 'valid-password',
+    phone: '5512345678'
+  });
+  assert.equal(replayedProof.status, 401);
+});
+
+test('simultaneous auth requests cannot reuse the same phone verification', async (t) => {
+  const rig = await createRig(t);
+  let smsBody;
+  global.fetch = async (_url, options) => {
+    smsBody = JSON.parse(options.body);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { smsBatchId: 'concurrent-auth' } })
+    };
+  };
+
+  await post(rig.fetch, rig.url, '/api/verification/send', { phone: '5512345678' });
+  const code = smsBody.message.match(/\d{6}/)[0];
+  const verified = await post(rig.fetch, rig.url, '/api/verification/verify', {
+    phone: '5512345678',
+    code
+  });
+  assert.equal(verified.status, 200);
+
+  const requests = await Promise.all([
+    post(rig.fetch, rig.url, '/api/auth', {
+      email: 'demo@example.com',
+      password: 'valid-password',
+      phone: '5512345678'
+    }),
+    post(rig.fetch, rig.url, '/api/auth', {
+      email: 'demo@example.com',
+      password: 'valid-password',
+      phone: '5512345678'
+    })
+  ]);
+  const statuses = await Promise.all(requests.map((response) => response.status));
+  assert.deepEqual(statuses.sort(), [200, 401]);
 });

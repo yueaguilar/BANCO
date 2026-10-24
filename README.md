@@ -86,6 +86,7 @@ COUNTER_DEVICE_IDS=CONTADOR_KIKE_01,CNT-001,contador-arduino-01
 
 No guardes ni subas credenciales al repositorio. El archivo `.env` debe permanecer ignorado por Git.
 En producción, configura `DATABASE_URL`, `JWT_SECRET`, `COUNTER_DEVICE_TOKEN`, `COUNTER_DEVICE_IDS`, `TEXTBEE_API_KEY` y `SMS_CODE_HMAC_SECRET` en las variables privadas del servicio backend en Render. `JWT_SECRET`, `COUNTER_DEVICE_TOKEN` y `SMS_CODE_HMAC_SECRET` deben tener al menos 32 caracteres; genera valores aleatorios para los secretos. No los incluyas en Angular ni en Firebase Hosting.
+La API acepta CORS desde los sitios de producción `bancokike-45795.web.app` y `bancokike-45795.firebaseapp.com`; en desarrollo local también permite `localhost:4200` y `127.0.0.1:4200`. Para un dominio oficial adicional, configura `CORS_ALLOWED_ORIGINS` con orígenes exactos separados por comas. El endpoint de envío de SMS admite hasta cinco solicitudes por IP cada 15 minutos y conserva el límite adicional de un envío por teléfono cada minuto.
 
 ---
 

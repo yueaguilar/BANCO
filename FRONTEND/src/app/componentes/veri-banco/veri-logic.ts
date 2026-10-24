@@ -135,7 +135,7 @@ export function iniciarVerificacion(): void {
   }
 
   if (phone) {
-    sendCode();
+    setStatus('Ingresa el código que enviamos al teléfono indicado.');
   } else {
     setStatus('No se encontró un teléfono para esta sesión.', true);
   }

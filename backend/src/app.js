@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const { createHmac } = require('node:crypto');
 const express = require('express');
 const cors = require('cors');
 const pool = require('./database');
@@ -18,8 +19,8 @@ const {
     storeVerificationCode,
     discardVerificationCode,
     consumeVerificationCode,
-    isPhoneVerified,
     consumePhoneVerification,
+    AUTH_VERIFICATION_PURPOSE,
     VerificationRateLimitError
 } = require('./services/verificationService');
 const { sendSms } = require('./services/textbeeService');
@@ -33,8 +34,29 @@ const TEMPORARY_NIP_TTL_MS = 5 * 60 * 1000;
 const TEMPORARY_NIP_FAILURE_LIMIT = 5;
 const TEMPORARY_NIP_LOCK_MS = 15 * 60 * 1000;
 const TEMPORARY_NIP_SUCCESS_INTERVAL_MS = 60 * 1000;
+const SMS_IP_WINDOW_MS = 15 * 60 * 1000;
+const SMS_IP_MAX_REQUESTS = 5;
 
-app.use(cors());
+const allowedOrigins = new Set([
+    'https://bancokike-45795.web.app',
+    'https://bancokike-45795.firebaseapp.com',
+    ...(process.env.NODE_ENV === 'production' ? [] : [
+        'http://localhost:4200',
+        'http://127.0.0.1:4200'
+    ]),
+    ...String(process.env.CORS_ALLOWED_ORIGINS || '')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+]);
+
+const isBehindRenderProxy = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+app.set('trust proxy', isBehindRenderProxy ? 1 : false);
+app.use(cors({
+    origin(origin, callback) {
+        callback(null, !origin || allowedOrigins.has(origin));
+    }
+}));
 app.use(express.json({ limit: '16kb' }));
 
 app.get('/health', async (_req, res) => {
@@ -76,8 +98,22 @@ async function ensureTables() {
                 expires_at TIMESTAMPTZ,
                 failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
                 last_sent_at TIMESTAMPTZ,
-                verified_until TIMESTAMPTZ
+                verified_until TIMESTAMPTZ,
+                verified_purpose VARCHAR(30)
             )
+        `);
+        await pool.query('ALTER TABLE phone_verifications ADD COLUMN IF NOT EXISTS verified_purpose VARCHAR(30)');
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS sms_ip_rate_limits (
+                ip_key CHAR(64) PRIMARY KEY,
+                window_started_at TIMESTAMPTZ NOT NULL,
+                request_count INTEGER NOT NULL CHECK (request_count >= 0)
+            )
+        `);
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_sms_ip_rate_limits_window
+            ON sms_ip_rate_limits (window_started_at)
         `);
 
         await pool.query(`
@@ -613,6 +649,52 @@ app.post('/api/verification/send', async (req, res) => {
     const { phone } = req.body || {};
     const normalizedPhone = normalizePhone(phone);
 
+    const ipAddress = req.ip;
+    if (!ipAddress || ipAddress.length > 45) {
+        return res.status(400).json({ success: false, message: 'No se pudo identificar el origen de la solicitud.' });
+    }
+    try {
+        const hmacSecret = process.env.SMS_CODE_HMAC_SECRET;
+        if (typeof hmacSecret !== 'string' || Buffer.byteLength(hmacSecret, 'utf8') < 32) {
+            throw new Error('SMS_CODE_HMAC_SECRET is unavailable.');
+        }
+        const ipKey = createHmac('sha256', hmacSecret).update(ipAddress).digest('hex');
+        const rateLimit = await pool.query(
+            `INSERT INTO sms_ip_rate_limits (ip_key, window_started_at, request_count)
+             VALUES ($1, NOW(), 1)
+             ON CONFLICT (ip_key) DO UPDATE
+             SET window_started_at = CASE
+                     WHEN sms_ip_rate_limits.window_started_at <= NOW() - INTERVAL '15 minutes' THEN NOW()
+                     ELSE sms_ip_rate_limits.window_started_at
+                 END,
+                 request_count = CASE
+                     WHEN sms_ip_rate_limits.window_started_at <= NOW() - INTERVAL '15 minutes' THEN 1
+                     ELSE sms_ip_rate_limits.request_count + 1
+                 END
+             RETURNING request_count, window_started_at`,
+            [ipKey]
+        );
+        const attempts = Number(rateLimit.rows[0]?.request_count);
+        if (!Number.isSafeInteger(attempts)) {
+            throw new Error('No se pudo evaluar el límite de SMS.');
+        }
+        if (attempts > SMS_IP_MAX_REQUESTS) {
+            const windowStartedAt = new Date(rateLimit.rows[0].window_started_at).getTime();
+            const retryAfterSeconds = Math.max(
+                1,
+                Math.ceil((windowStartedAt + SMS_IP_WINDOW_MS - Date.now()) / 1000)
+            );
+            res.set('Retry-After', String(retryAfterSeconds));
+            return res.status(429).json({
+                success: false,
+                message: 'Se alcanzó el límite de solicitudes de SMS desde esta conexión. Inténtalo más tarde.'
+            });
+        }
+    } catch (error) {
+        console.error('No se pudo aplicar el límite de solicitudes SMS.', error?.code || error?.name || 'unknown');
+        return res.status(503).json({ success: false, message: 'El envío de SMS no está disponible temporalmente.' });
+    }
+
     if (!normalizedPhone) {
         return res.status(400).json({ success: false, message: 'Ingresa un número mexicano válido de 10 dígitos.' });
     }
@@ -686,7 +768,7 @@ app.post('/api/auth', async (req, res) => {
     }
 
     try {
-        if (!await isPhoneVerified(normalizedPhone)) {
+        if (!await consumePhoneVerification(normalizedPhone, AUTH_VERIFICATION_PURPOSE)) {
             return res.status(401).json({ success: false, message: 'Debes verificar por SMS el número de teléfono de esta solicitud.' });
         }
 
@@ -696,10 +778,6 @@ app.post('/api/auth', async (req, res) => {
             const user = rows[0];
             const match = await bcrypt.compare(password, user.password);
             if (match) {
-                if (!await consumePhoneVerification(normalizedPhone)) {
-                    return res.status(401).json({ success: false, message: 'Debes verificar por SMS el número de teléfono de esta solicitud.' });
-                }
-
                 if (normalizedPhone && (!user.phone || user.phone !== normalizedPhone)) {
                     await pool.query('UPDATE users SET phone = $1 WHERE id = $2', [normalizedPhone, user.id]);
                 }
@@ -719,10 +797,6 @@ app.post('/api/auth', async (req, res) => {
         }
 
         const hashed = await bcrypt.hash(password, 10);
-        if (!await consumePhoneVerification(normalizedPhone)) {
-            return res.status(401).json({ success: false, message: 'Debes verificar por SMS el número de teléfono de esta solicitud.' });
-        }
-
         const userInsert = await pool.query(
             'INSERT INTO users(fullname, email, birthdate, password, phone) VALUES($1,$2,$3,$4,$5) RETURNING id',
             [fullname || null, normalizedEmail, birthdate || null, hashed, normalizedPhone]
