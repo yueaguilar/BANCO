@@ -27,6 +27,8 @@ export class LoginBanco {
   loading = false;
   errorMessage = '';
   mostrarPassword = false;
+  phoneError = '';
+  phoneTouched = false;
 
   email = '';
   fullname = '';
@@ -35,29 +37,68 @@ export class LoginBanco {
   password = '';
   code = '';
 
-private readonly apiUrl = `${API_URL}/api`;
-constructor(
-  private http: HttpClient,
-  private router: Router,
-  private cdr: ChangeDetectorRef
-) {}
+  private readonly apiUrl = `${API_URL}/api`;
+
+  constructor(
+    private http: HttpClient,
+    private router: Router,
+    private cdr: ChangeDetectorRef
+  ) {}
 
   soloNumeros(): void {
-    this.phone = this.phone.replace(/\D/g, '').slice(0, 10);
+    this.phone = this.phone
+      .replace(/[^\d+]/g, '')
+      .replace(/(?!^)\+/g, '')
+      .slice(0, 13);
+
+    if (this.phoneTouched) {
+      this.validarTelefono();
+    }
+  }
+
+  validarTelefono(): boolean {
+    this.phoneTouched = true;
+    const digits = this.phone.replace(/\D/g, '');
+    const isLocalNumber = /^\d{10}$/.test(digits);
+    const isCountryCodeNumber = /^52\d{10}$/.test(digits);
+
+    this.phoneError = !digits
+      ? 'Ingresa el código de país +52 y los 10 dígitos de tu celular.'
+      : isLocalNumber || isCountryCodeNumber
+        ? ''
+        : 'El número debe incluir +52 y exactamente 10 dígitos de celular. Ejemplo: +52 55 1234 5678.';
+
+    return !this.phoneError;
+  }
+
+  private obtenerNumeroLocal(): string | null {
+    const digits = this.phone.replace(/\D/g, '');
+    if (/^\d{10}$/.test(digits)) {
+      return digits;
+    }
+    if (/^52\d{10}$/.test(digits)) {
+      return digits.slice(2);
+    }
+    return null;
   }
 
   enviarCodigo(): void {
     this.errorMessage = '';
 
-    if (this.phone.length !== 10) {
-      this.errorMessage = 'Ingresa un número de celular válido de 10 dígitos.';
+    if (!this.validarTelefono()) {
       return;
     }
+
+    const localPhone = this.obtenerNumeroLocal();
+    if (!localPhone) {
+      return;
+    }
+    this.phone = `+52${localPhone}`;
 
     this.loading = true;
 
     this.http.post<any>(`${this.apiUrl}/verification/send`, {
-      phone: this.phone
+      phone: localPhone
     }).subscribe({
     next: (res) => {
   this.loading = false;
@@ -80,6 +121,12 @@ error: (err) => {
 
   verificarYAutenticar(): void {
     this.errorMessage = '';
+    const localPhone = this.obtenerNumeroLocal();
+    if (!localPhone) {
+      this.errorMessage = 'El número de teléfono no es válido. Ingresa +52 y los 10 dígitos de tu celular.';
+      this.step = 'form';
+      return;
+    }
     if (!this.email.trim() || !this.password) {
       this.errorMessage = 'Correo y contraseña son obligatorios para crear la cuenta o iniciar sesión.';
       return;
@@ -87,7 +134,7 @@ error: (err) => {
     this.loading = true;
 
     this.http.post<any>(`${this.apiUrl}/verification/verify`, {
-      phone: this.phone,
+      phone: localPhone,
       code: this.code
     }).subscribe({
       next: (res) => {
@@ -102,7 +149,7 @@ error: (err) => {
           fullname: this.fullname.trim(),
           birthdate: this.birthdate,
           password: this.password,
-          phone: this.phone
+          phone: localPhone
         }).subscribe({
           next: (authRes) => {
             this.loading = false;

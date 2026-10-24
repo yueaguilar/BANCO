@@ -4,7 +4,7 @@
 </div>
 
 <div class="info" *ngIf="step === 'form'">
-    <form id="auth-form" class="login-form" (ngSubmit)="enviarCodigo()">
+    <form id="auth-form" class="login-form" (ngSubmit)="enviarCodigo()" novalidate>
         <input id="email" class="correo liquid-glass-input" type="email" name="email"
                placeholder="Correo electrónico" [(ngModel)]="email">
 
@@ -15,9 +15,12 @@
         <input id="birthdate" class="liquid-glass-input" type="date" name="birthdate"
                [(ngModel)]="birthdate">
 
-        <input id="phone" class="liquid-glass-input" type="tel" inputmode="numeric" maxlength="10"
-               name="phone" placeholder="Número de celular (10 dígitos)"
-               [(ngModel)]="phone" (input)="soloNumeros()" required>
+        <input id="phone" class="liquid-glass-input" type="tel" inputmode="tel" autocomplete="tel"
+               maxlength="13" name="phone" placeholder="+52 55 1234 5678"
+               aria-describedby="phone-help phone-error" [attr.aria-invalid]="phoneError ? 'true' : null"
+               [(ngModel)]="phone" (input)="soloNumeros()" (blur)="validarTelefono()">
+        <p id="phone-help" class="small">Incluye +52 y los 10 dígitos de tu celular. También puedes escribir solo los 10 dígitos.</p>
+        <p id="phone-error" class="error" *ngIf="phoneError" aria-live="polite">{{ phoneError }}</p>
 
         <div class="password-row">
             <input id="password" class="liquid-glass-input"
