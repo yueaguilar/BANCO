@@ -112,17 +112,48 @@ router.post('/api/contador/depositos/autenticar', authenticateDevice, async (req
         }
 
         const accountResult = await client.query(
-            `SELECT c.id, c.numero_cuenta, t.nip_hash
+            `SELECT c.id, c.usuario_id, c.numero_cuenta, t.nip_hash
              FROM cuentas c
              JOIN tarjetas t ON t.cuenta_id = c.id
-             WHERE c.numero_cuenta = $1`,
+             WHERE c.numero_cuenta = $1
+             FOR SHARE OF c, t`,
             [accountNumber]
         );
-        const hashes = accountResult.rows.map((row) => row.nip_hash);
-        const comparisons = await Promise.all((hashes.length > 0 ? hashes : [DUMMY_NIP_HASH])
-            .map((hash) => verifyNip(nip, hash)));
-        const validIndex = comparisons.findIndex(Boolean);
-        const authenticatedAccount = validIndex >= 0 ? accountResult.rows[validIndex] : null;
+        const accountOwnerId = accountResult.rows[0]?.usuario_id;
+        let temporaryAttempt = null;
+        if (accountOwnerId !== undefined) {
+            const temporaryAttemptResult = await client.query(
+                `SELECT failed_attempts, blocked_until, nip_hash, expires_at,
+                        expires_at > NOW() AS is_unexpired,
+                        blocked_until > NOW() AS is_blocked
+                 FROM temporary_nip_attempts
+                 WHERE user_id = $1
+                 FOR UPDATE`,
+                [accountOwnerId]
+            );
+            temporaryAttempt = temporaryAttemptResult.rows[0] || null;
+        }
+
+        const temporaryNipUsable = Boolean(
+            temporaryAttempt?.nip_hash
+            && temporaryAttempt.is_unexpired
+            && !temporaryAttempt.is_blocked
+        );
+        const cardHashes = accountResult.rows.map((row) => row.nip_hash);
+        const [cardComparisons, temporaryNipMatches] = await Promise.all([
+            Promise.all((cardHashes.length > 0 ? cardHashes : [DUMMY_NIP_HASH])
+                .map((hash) => verifyNip(nip, hash))),
+            verifyNip(nip, temporaryNipUsable ? temporaryAttempt.nip_hash : DUMMY_NIP_HASH)
+        ]);
+        const validCardIndex = cardComparisons.findIndex(Boolean);
+        const authenticatedAccount = validCardIndex >= 0
+            ? accountResult.rows[validCardIndex]
+            : temporaryNipMatches && temporaryNipUsable
+                ? accountResult.rows[0]
+                : null;
+        const authenticatedWithTemporaryNip = Boolean(
+            authenticatedAccount && temporaryNipMatches && temporaryNipUsable
+        );
 
         if (!authenticatedAccount) {
             await client.query(
@@ -136,10 +167,68 @@ router.post('/api/contador/depositos/autenticar', authenticateDevice, async (req
                  WHERE dispositivo_id = $1 AND numero_cuenta = $2`,
                 [deviceId, accountNumber, MAX_NIP_ATTEMPTS, NIP_LOCK_MINUTES]
             );
+            if (temporaryNipUsable) {
+                await client.query(
+                    `UPDATE temporary_nip_attempts
+                     SET failed_attempts = CASE
+                             WHEN blocked_until IS NOT NULL AND blocked_until <= NOW() THEN 1
+                             ELSE failed_attempts + 1
+                         END,
+                         blocked_until = CASE
+                             WHEN CASE
+                                 WHEN blocked_until IS NOT NULL AND blocked_until <= NOW() THEN 1
+                                 ELSE failed_attempts + 1
+                             END >= $2
+                             THEN NOW() + ($3 * INTERVAL '1 minute')
+                             ELSE NULL
+                         END,
+                         updated_at = NOW()
+                     WHERE user_id = $1`,
+                    [accountOwnerId, MAX_NIP_ATTEMPTS, NIP_LOCK_MINUTES]
+                );
+            }
             await client.query('COMMIT');
+            if (temporaryAttempt?.is_blocked) {
+                return res.status(429).json({
+                    success: false,
+                    message: 'Se alcanzó el límite de intentos. Intenta de nuevo en 15 minutos.'
+                });
+            }
             return res.status(401).json({ success: false, message: 'La cuenta o el NIP son incorrectos.' });
         }
 
+        const token = jwt.sign({ dispositivo_id: deviceId }, secret, {
+            subject: String(authenticatedAccount.id),
+            issuer: 'banco-kike-counter-api',
+            audience: 'banco-kike-counter',
+            expiresIn: '10m'
+        });
+        if (authenticatedWithTemporaryNip) {
+            const consumedNipResult = await client.query(
+                `UPDATE temporary_nip_attempts
+                 SET nip_hash = NULL, expires_at = NULL, failed_attempts = 0,
+                     blocked_until = NULL, updated_at = NOW()
+                 WHERE user_id = $1 AND nip_hash = $2 AND expires_at > NOW()
+                   AND (blocked_until IS NULL OR blocked_until <= NOW())
+                 RETURNING user_id`,
+                [accountOwnerId, temporaryAttempt.nip_hash]
+            );
+            if (consumedNipResult.rows.length === 0) {
+                await client.query(
+                    `UPDATE contador_intentos_nip
+                     SET intentos = intentos + 1,
+                         bloqueado_hasta = CASE
+                             WHEN intentos + 1 >= $3 THEN NOW() + ($4 * INTERVAL '1 minute')
+                             ELSE NULL
+                         END,
+                         updated_at = NOW()
+                     WHERE dispositivo_id = $1 AND numero_cuenta = $2`,
+                    [deviceId, accountNumber, MAX_NIP_ATTEMPTS, NIP_LOCK_MINUTES]
+                );
+                await client.query('COMMIT');
+                return res.status(401).json({ success: false, message: 'La cuenta o el NIP son incorrectos.' });
+            }
+        }
         await client.query(
             `UPDATE contador_intentos_nip
              SET intentos = 0, bloqueado_hasta = NULL, updated_at = NOW()
@@ -147,12 +236,6 @@ router.post('/api/contador/depositos/autenticar', authenticateDevice, async (req
             [deviceId, accountNumber]
         );
         await client.query('COMMIT');
-        const token = jwt.sign({ dispositivo_id: deviceId }, secret, {
-            subject: String(authenticatedAccount.id),
-            issuer: 'banco-kike-counter-api',
-            audience: 'banco-kike-counter',
-            expiresIn: '10m'
-        });
         return res.json({
             success: true,
             message: 'Cuenta autenticada.',
