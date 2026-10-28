@@ -39,8 +39,8 @@
         </div>
 
         <div class="action-row">
-            <button class="action-btn primary-btn" type="button">Enviar</button>
-            <button class="action-btn ghost-btn" type="button">Recibir</button>
+            <button class="action-btn primary-btn" id="sendMoneyBtn" type="button">Enviar</button>
+            <button class="action-btn ghost-btn" id="receiveMoneyBtn" type="button">Recibir</button>
             <button class="action-btn ghost-btn" id="recargarBtn" type="button">Recargar</button>
         </div>
     </section>
@@ -68,7 +68,10 @@
     <section class="panel glass-card">
         <div class="panel-header">
             <h3>Mis tarjetas</h3>
-            <button class="link-btn" type="button">Agregar</button>
+            <div class="card-controls">
+                <button class="link-btn" id="addCardBtn" type="button">Agregar</button>
+                <button class="link-btn" id="toggleCardNumberBtn" type="button" aria-pressed="false" disabled>Mostrar número</button>
+            </div>
         </div>
 
         <div class="cards-list">
@@ -77,7 +80,7 @@
                     <span class="chip"></span>
                     <span class="card-brand">LCDK</span>
                 </div>
-                <strong>••••</strong>
+                <strong id="cardNumberDisplay">•••• •••• •••• ••••</strong>
                 <div class="card-bottom">
                     <span>Titular</span>
                     <span>00/00</span>
@@ -142,6 +145,30 @@
             <div class="detail-row"><span>Vigencia</span><strong id="detailExpiry">--/--</strong></div>
         </div>
         <small class="detail-note">El NIP real nunca se muestra. Puedes solicitar un NIP temporal verificando tu contraseña.</small>
+    </div>
+</div>
+
+<div id="addCardModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="addCardTitle">
+    <div class="modal-panel">
+        <button id="closeAddCard" class="close" type="button" aria-label="Cerrar">×</button>
+        <h3 id="addCardTitle">Solicitar una tarjeta</h3>
+        <p>Para solicitar una tarjeta adicional, envía un correo a atención al cliente. No se emitirá ninguna tarjeta hasta que el banco confirme tu solicitud.</p>
+        <a class="primary-btn modal-action" href="mailto:hola@lcdk.com.ar?subject=Solicitud%20de%20tarjeta%20adicional">Enviar solicitud por correo</a>
+    </div>
+</div>
+
+<div id="receiveInstructionsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="receiveInstructionsTitle">
+    <div class="modal-panel">
+        <button id="closeReceiveInstructions" class="close" type="button" aria-label="Cerrar">×</button>
+        <h3 id="receiveInstructionsTitle">Recibir un depósito con el contador</h3>
+        <ol class="receive-steps">
+            <li>Coloca los billetes en el contador autorizado y espera a que registre el lote.</li>
+            <li>En Depositar, selecciona el conteo disponible y la denominación correcta.</li>
+            <li>Valida el número de cuenta y revisa el importe calculado por el servidor.</li>
+            <li>Confirma el depósito; el saldo y el historial se actualizarán al completarse.</li>
+        </ol>
+        <p class="detail-note">No ingreses conteos manuales. Solo se aceptan registros enviados por un dispositivo autorizado.</p>
+        <a class="primary-btn modal-action" routerLink="/deposito-contador">Ir a Depositar</a>
     </div>
 </div>
 

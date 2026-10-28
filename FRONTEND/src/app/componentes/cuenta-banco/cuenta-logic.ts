@@ -19,6 +19,13 @@ interface SessionData {
   success?: boolean;
 }
 import { API_URL } from '../../api-config';
+import {
+  esIngreso,
+  obtenerMovimientosBancarios,
+  renderizarEstadoVacio,
+  renderizarMovimiento,
+  type MovimientoBancario
+} from '../../services/movimientos.service';
 
 export async function iniciarApp(): Promise<() => void> {
   let countdownInterval: ReturnType<typeof setInterval> | undefined;
@@ -200,16 +207,15 @@ export async function iniciarApp(): Promise<() => void> {
         '.credit-card .card-bottom span'
       );
 
-    if (
-      cardStrong &&
-      bankData?.numeroTarjeta
-    ) {
-
-      const num =
-        String(bankData.numeroTarjeta);
-
-      cardStrong.textContent =
-        '•••• ' + num.slice(-4);
+    if (cardStrong) {
+      numeroTarjetaActual = bankData?.numeroTarjeta
+        ? String(bankData.numeroTarjeta)
+        : '';
+      cardStrong.textContent = numeroTarjetaActual
+        ? `•••• •••• •••• ${numeroTarjetaActual.slice(-4)}`
+        : 'Tarjeta no disponible';
+      const cardNumberButton = document.getElementById('toggleCardNumberBtn') as HTMLButtonElement | null;
+      if (cardNumberButton) cardNumberButton.disabled = !numeroTarjetaActual;
 
       if (cardBottomSpans.length >= 2) {
 
@@ -217,7 +223,7 @@ export async function iniciarApp(): Promise<() => void> {
           user?.fullname || 'Titular';
 
         cardBottomSpans[1].textContent =
-          `${String(bankData.mesExpiracion || '').padStart(2, '0')}/${String(bankData.anioExpiracion || '').slice(-2)}`;
+          `${String(bankData?.mesExpiracion || '').padStart(2, '0')}/${String(bankData?.anioExpiracion || '').slice(-2)}`;
       }
     }
 
@@ -249,6 +255,8 @@ export async function iniciarApp(): Promise<() => void> {
     }
   };
 
+  let numeroTarjetaActual = '';
+
   // ==========================================
   // MODAL "VER TODO"
   // ==========================================
@@ -259,8 +267,7 @@ export async function iniciarApp(): Promise<() => void> {
   const modalList =
     document.getElementById('modalList');
 
-  const sourceList =
-    document.getElementById('transactionList');
+  let accountMovements: MovimientoBancario[] = [];
 
   const openModalBtn =
     document.getElementById('verTodas');
@@ -289,12 +296,16 @@ export async function iniciarApp(): Promise<() => void> {
   ) {
 
     const openModal = (): void => {
-
-      if (sourceList) {
-        modalList.innerHTML =
-          sourceList.innerHTML;
+      modalList.replaceChildren();
+      if (accountMovements.length) {
+        accountMovements.forEach((movement) => {
+          modalList.append(renderizarMovimiento(movement, 'cuenta'));
+        });
+      } else {
+        modalList.append(
+          renderizarEstadoVacio('cuenta', 'Sin movimientos aún')
+        );
       }
-
       modal.classList.remove('hidden');
     };
 
@@ -318,7 +329,6 @@ export async function iniciarApp(): Promise<() => void> {
     modal.addEventListener(
       'click',
       (event: MouseEvent) => {
-
         if (event.target === modal) {
           closeModal();
         }
@@ -335,6 +345,105 @@ export async function iniciarApp(): Promise<() => void> {
       }
     );
   }
+
+  const addCardModal = document.getElementById('addCardModal');
+  const addCardButton = document.getElementById('addCardBtn');
+  const closeAddCardButton = document.getElementById('closeAddCard');
+  const openAddCardModal = (): void => addCardModal?.classList.remove('hidden');
+  const closeAddCardModal = (): void => addCardModal?.classList.add('hidden');
+  addCardButton?.addEventListener('click', openAddCardModal);
+  closeAddCardButton?.addEventListener('click', closeAddCardModal);
+  const closeAddCardBackdrop = (event: MouseEvent): void => {
+    if (event.target === addCardModal) closeAddCardModal();
+  };
+  addCardModal?.addEventListener('click', closeAddCardBackdrop);
+
+  const toggleCardNumberButton = document.getElementById('toggleCardNumberBtn');
+  const cardNumberDisplay = document.getElementById('cardNumberDisplay');
+  let mostrarNumeroTarjeta = false;
+  const toggleCardNumber = (): void => {
+    if (!cardNumberDisplay || !numeroTarjetaActual) return;
+    mostrarNumeroTarjeta = !mostrarNumeroTarjeta;
+    cardNumberDisplay.textContent = mostrarNumeroTarjeta
+      ? numeroTarjetaActual.replace(/(.{4})/g, '$1 ').trim()
+      : `•••• •••• •••• ${numeroTarjetaActual.slice(-4)}`;
+    toggleCardNumberButton?.setAttribute('aria-pressed', String(mostrarNumeroTarjeta));
+    if (toggleCardNumberButton) {
+      toggleCardNumberButton.textContent = mostrarNumeroTarjeta
+        ? 'Ocultar número'
+        : 'Mostrar número';
+    }
+  };
+  toggleCardNumberButton?.addEventListener('click', toggleCardNumber);
+
+  const receiveModal = document.getElementById('receiveInstructionsModal');
+  const receiveButton = document.getElementById('receiveMoneyBtn');
+  const closeReceiveButton = document.getElementById('closeReceiveInstructions');
+  const openReceiveModal = (): void => receiveModal?.classList.remove('hidden');
+  const closeReceiveModal = (): void => receiveModal?.classList.add('hidden');
+  receiveButton?.addEventListener('click', openReceiveModal);
+  closeReceiveButton?.addEventListener('click', closeReceiveModal);
+  const closeReceiveBackdrop = (event: MouseEvent): void => {
+    if (event.target === receiveModal) closeReceiveModal();
+  };
+  receiveModal?.addEventListener('click', closeReceiveBackdrop);
+
+  const sendMoneyButton = document.getElementById('sendMoneyBtn');
+  const sendMoney = (): void => {
+    window.location.href = '/transferir';
+  };
+  sendMoneyButton?.addEventListener('click', sendMoney);
+
+  const loadAccountMovements = async (): Promise<void> => {
+    const list = document.getElementById('transactionList');
+    const token = localStorage.getItem('sessionToken') || '';
+    if (!list) return;
+    if (!token) {
+      list.replaceChildren(
+        renderizarEstadoVacio('cuenta', 'Inicia sesión para ver tu historial real')
+      );
+      return;
+    }
+
+    try {
+      accountMovements = await obtenerMovimientosBancarios(token);
+      list.replaceChildren();
+      if (accountMovements.length) {
+        accountMovements.slice(0, 3).forEach((movement) => {
+          list.append(renderizarMovimiento(movement, 'cuenta'));
+        });
+      } else {
+        list.append(renderizarEstadoVacio('cuenta', 'Sin movimientos aún'));
+      }
+
+      const currentMonthMovements = accountMovements.filter((movement) => {
+        const date = new Date(movement.created_at);
+        const now = new Date();
+        return date.getFullYear() === now.getFullYear() &&
+          date.getMonth() === now.getMonth();
+      });
+      const income = currentMonthMovements
+        .filter(esIngreso)
+        .reduce((total, movement) => total + Number(movement.monto), 0);
+      const expenses = currentMonthMovements
+        .filter((movement) => !esIngreso(movement))
+        .reduce((total, movement) => total + Number(movement.monto), 0);
+      const formatSummary = (value: number): string =>
+        new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(value);
+      const incomeEl = document.querySelector<HTMLElement>('.summary-grid .positive');
+      const expenseEl = document.querySelector<HTMLElement>('.summary-grid .negative');
+      if (incomeEl) incomeEl.textContent = formatSummary(income);
+      if (expenseEl) expenseEl.textContent = formatSummary(expenses);
+    } catch (error) {
+      console.error('No se pudo cargar el historial bancario.', error);
+      list.replaceChildren(
+        renderizarEstadoVacio(
+          'cuenta',
+          'No se pudo actualizar el historial. Intenta de nuevo.'
+        )
+      );
+    }
+  };
 
   // ==========================================
   // PANEL "VER DETALLE"
@@ -602,7 +711,13 @@ export async function iniciarApp(): Promise<() => void> {
       closeTemporaryNipModal();
     }
   };
+  const handleUtilityModalEscape = (event: KeyboardEvent): void => {
+    if (event.key !== 'Escape') return;
+    closeAddCardModal();
+    closeReceiveModal();
+  };
   document.addEventListener('keydown', handleTemporaryNipEscape);
+  document.addEventListener('keydown', handleUtilityModalEscape);
   window.addEventListener('storage', handleSessionStorageChange);
 
   const cleanup = (): void => {
@@ -613,7 +728,16 @@ export async function iniciarApp(): Promise<() => void> {
     temporaryNipForm?.removeEventListener('submit', handleTemporaryNipSubmit);
     temporaryNipModal?.removeEventListener('click', handleTemporaryNipBackdrop);
     document.removeEventListener('keydown', handleTemporaryNipEscape);
+    document.removeEventListener('keydown', handleUtilityModalEscape);
     window.removeEventListener('storage', handleSessionStorageChange);
+    addCardButton?.removeEventListener('click', openAddCardModal);
+    closeAddCardButton?.removeEventListener('click', closeAddCardModal);
+    addCardModal?.removeEventListener('click', closeAddCardBackdrop);
+    toggleCardNumberButton?.removeEventListener('click', toggleCardNumber);
+    receiveButton?.removeEventListener('click', openReceiveModal);
+    closeReceiveButton?.removeEventListener('click', closeReceiveModal);
+    receiveModal?.removeEventListener('click', closeReceiveBackdrop);
+    sendMoneyButton?.removeEventListener('click', sendMoney);
   };
 
   // ==========================================
@@ -633,6 +757,7 @@ export async function iniciarApp(): Promise<() => void> {
       local.bankData
     );
 
+    await loadAccountMovements();
     return cleanup;
   }
 
@@ -674,5 +799,6 @@ export async function iniciarApp(): Promise<() => void> {
     );
   }
 
+  await loadAccountMovements();
   return cleanup;
 }

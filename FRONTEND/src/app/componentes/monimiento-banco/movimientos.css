@@ -234,9 +234,16 @@ a {
   gap: 16px;
   padding: 14px 12px;
   border-radius: 18px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(120deg, rgba(255,255,255,0.055), rgba(255,255,255,0.025));
+  border: 1px solid rgba(255,255,255,0.1);
   margin-bottom: 12px;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.movement-item:not(.empty-state):hover {
+  transform: translateY(-1px);
+  border-color: rgba(201,246,255,0.25);
+  background: linear-gradient(120deg, rgba(144,224,239,0.09), rgba(255,255,255,0.035));
 }
 
 .movement-left {
@@ -286,6 +293,33 @@ a {
   display: block;
   color: var(--muted);
   margin-top: 4px;
+}
+
+.movement-kind {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 3px 9px;
+  border: 1px solid rgba(144,224,239,0.22);
+  border-radius: 999px;
+  background: rgba(144,224,239,0.08);
+  color: var(--primary-strong);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.movement-kind.income {
+  border-color: rgba(142,240,176,0.24);
+  background: rgba(142,240,176,0.09);
+  color: var(--success);
+}
+
+.movement-kind.transfer {
+  border-color: rgba(255,140,168,0.22);
+  background: rgba(255,140,168,0.08);
+  color: var(--danger);
 }
 
 .movement-right {

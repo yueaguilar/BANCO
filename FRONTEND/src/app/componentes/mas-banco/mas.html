@@ -55,19 +55,19 @@
         </div>
 
         <div class="service-list">
-            <button class="service-item" type="button">
+            <button class="service-item" id="securityFraudBtn" type="button">
                 <span class="service-icon">✓</span>
                 <span>Seguridad y fraude</span>
             </button>
-            <button class="service-item" type="button">
+            <a class="service-item" routerLink="/transferir">
                 <span class="service-icon">↗</span>
                 <span>Transferencias internacionales</span>
-            </button>
-            <button class="service-item" type="button">
+            </a>
+            <button class="service-item" id="savingsInvestmentsBtn" type="button">
                 <span class="service-icon">%</span>
                 <span>Inversiones y ahorros</span>
             </button>
-            <button class="service-item" type="button">
+            <button class="service-item" id="prioritySupportBtn" type="button">
                 <span class="service-icon">☎</span>
                 <span>Soporte prioritario</span>
             </button>
@@ -103,3 +103,29 @@
 <a routerLink="/cuenta" class="nav-item">Cuenta</a>
 <a routerLink="/mas" class="nav-item">Más</a>
 </nav>
+
+<div id="securityFraudModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="securityFraudTitle">
+    <div class="modal-panel">
+        <button id="closeSecurityFraud" class="close" type="button" aria-label="Cerrar">×</button>
+        <h3 id="securityFraudTitle">Seguridad y fraude</h3>
+        <p>Si detectas una operación sospechosa o necesitas reportar un fraude, comunícate con nosotros:</p>
+        <a href="mailto:bancokike98@gmail.com">bancokike98@gmail.com</a>
+    </div>
+</div>
+
+<div id="savingsInvestmentsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="savingsInvestmentsTitle">
+    <div class="modal-panel">
+        <button id="closeSavingsInvestments" class="close" type="button" aria-label="Cerrar">×</button>
+        <h3 id="savingsInvestmentsTitle">Ahorros e inversiones</h3>
+        <p>Este servicio aún no está habilitado. Para operar con dinero real primero se deben definir los productos y completar la integración segura con el servidor. No se realizará ningún movimiento desde esta pantalla.</p>
+    </div>
+</div>
+
+<div id="prioritySupportModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="prioritySupportTitle">
+    <div class="modal-panel">
+        <button id="closePrioritySupport" class="close" type="button" aria-label="Cerrar">×</button>
+        <h3 id="prioritySupportTitle">Soporte prioritario</h3>
+        <p>Comunícate con nuestro equipo de atención al siguiente número:</p>
+        <a href="tel:4181176234">4181176234</a>
+    </div>
+</div>

@@ -286,6 +286,17 @@ a {
   padding: 0;
 }
 
+.card-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.card-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .cards-list {
   display: grid;
   grid-template-columns: 1.6fr 1fr;
@@ -366,6 +377,13 @@ a {
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.08);
   margin-bottom: 12px;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.transaction-item:not(.empty-state):hover {
+  transform: translateY(-1px);
+  border-color: rgba(201, 246, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .transaction-left {
@@ -424,6 +442,49 @@ a {
 .amount {
   font-weight: 700;
   font-size: 1rem;
+}
+
+.movement-kind {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 5px;
+  padding: 3px 8px;
+  border: 1px solid rgba(144, 224, 239, 0.18);
+  border-radius: 999px;
+  background: rgba(144, 224, 239, 0.08);
+  color: var(--primary-strong);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.movement-kind.income {
+  border-color: rgba(142, 240, 176, 0.22);
+  background: rgba(142, 240, 176, 0.09);
+  color: var(--success);
+}
+
+.movement-kind.transfer {
+  border-color: rgba(255, 140, 168, 0.2);
+  background: rgba(255, 140, 168, 0.08);
+  color: var(--danger);
+}
+
+.receive-steps {
+  display: grid;
+  gap: 12px;
+  margin: 1.25rem 0;
+  padding-left: 1.4rem;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.modal-action {
+  display: inline-flex;
+  justify-content: center;
+  margin-top: 1rem;
+  text-decoration: none;
 }
 
 .bottom-nav {
@@ -508,6 +569,10 @@ a {
   .account-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .card-controls {
+    flex-wrap: wrap;
   }
 }
 

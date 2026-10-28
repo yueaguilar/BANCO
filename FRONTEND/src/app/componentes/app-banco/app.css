@@ -105,15 +105,66 @@
   flex-shrink: 0;
 }
 
+.tx-icon.income {
+  background: rgba(142, 240, 176, 0.15);
+  color: var(--success);
+}
+
+.tx-icon.transfer {
+  background: rgba(144, 224, 239, 0.18);
+  color: var(--primary-strong);
+}
+
 .tx-meta {
   min-width: 0;
   font-size: 0.95rem;
   color: var(--text);
 }
 
+.tx-meta strong {
+  display: block;
+  font-weight: 650;
+}
+
+.tx-meta .small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.movement-kind {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 5px;
+  padding: 3px 8px;
+  border: 1px solid rgba(144, 224, 239, 0.18);
+  border-radius: 999px;
+  background: rgba(144, 224, 239, 0.08);
+  color: var(--primary-strong);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.movement-kind.income {
+  border-color: rgba(142, 240, 176, 0.22);
+  background: rgba(142, 240, 176, 0.09);
+  color: var(--success);
+}
+
+.movement-kind.transfer {
+  border-color: rgba(255, 140, 168, 0.2);
+  background: rgba(255, 140, 168, 0.08);
+  color: var(--danger);
+}
+
 .tx-amount {
   font-weight: 700;
   white-space: nowrap;
+}
+
+.tx-amount .negative {
+  color: var(--danger);
 }
 
 @media (max-width: 720px) {

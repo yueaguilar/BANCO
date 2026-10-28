@@ -8,12 +8,6 @@ interface BankData {
   [key: string]: unknown;
 }
 
-interface Transaction {
-  title?: string;
-  date?: string;
-  amount?: string;
-}
-
 interface Session {
   user: User | null;
   bankData: BankData | null;
@@ -25,6 +19,12 @@ interface SessionResponse {
   bankData: BankData;
 }
 import { API_URL } from '../../api-config';
+import {
+  obtenerMovimientosBancarios,
+  renderizarEstadoVacio,
+  renderizarMovimiento,
+  type MovimientoBancario
+} from '../../services/movimientos.service';
 
 // Interacciones principales: renderizado, modal y flujo de pago
 export async function iniciarApp(): Promise<void> {
@@ -153,7 +153,7 @@ export async function iniciarApp(): Promise<void> {
     };
   };
 
-  let transactions: Transaction[] = [];
+  let transactions: MovimientoBancario[] = [];
   let bankData: BankData | null = null;
 
   const session = await loadSession();
@@ -172,84 +172,41 @@ export async function iniciarApp(): Promise<void> {
     transactions = [];
   }
 
-  function render(
+  const render = (
     listEl: HTMLElement | null,
-    items: Transaction[]
-  ): void {
-
-    if (!listEl) {
-      return;
-    }
-
-    listEl.innerHTML = '';
+    items: MovimientoBancario[],
+    emptyMessage: string
+  ): void => {
+    if (!listEl) return;
+    listEl.replaceChildren();
 
     if (!items.length) {
-
-      const li = document.createElement('li');
-
-      li.className = 'tx-item empty-state';
-
-      li.innerHTML = `
-        <div class="tx-meta">
-          <div>Sin movimientos aún</div>
-          <div class="small">
-            Tu historial aparecerá aquí
-          </div>
-        </div>
-      `;
-
-      listEl.appendChild(li);
-
+      listEl.append(renderizarEstadoVacio('home', emptyMessage));
       return;
     }
 
-    items.forEach((tx) => {
-
-      const li = document.createElement('li');
-
-      li.className = 'tx-item';
-
-      li.innerHTML = `
-        <div class="tx-left">
-
-          <div class="tx-icon">
-            ${String(tx.title || 'M').charAt(0)}
-          </div>
-
-          <div class="tx-meta">
-
-            <div>
-              ${tx.title || 'Movimiento'}
-            </div>
-
-            <div class="small">
-              ${tx.date || 'Reciente'}
-            </div>
-
-          </div>
-
-        </div>
-
-        <div class="tx-amount">
-          ${tx.amount || ''}
-        </div>
-      `;
-
-      listEl.appendChild(li);
+    items.forEach((movement) => {
+      listEl.append(renderizarMovimiento(movement, 'home'));
     });
-  }
+  };
 
-  render(
-    txList,
-    transactions.slice(0, 3)
-  );
+  if (localStorage.getItem('sessionToken')) {
+    try {
+      transactions = await obtenerMovimientosBancarios(
+        localStorage.getItem('sessionToken') || ''
+      );
+      render(txList, transactions.slice(0, 3), 'Sin movimientos aún');
+    } catch (error) {
+      console.error('No se pudo cargar el historial bancario.', error);
+      render(txList, [], 'No se pudo actualizar el historial. Intenta de nuevo.');
+    }
+  } else {
+    render(txList, [], 'Inicia sesión para ver tu historial real');
+  }
 
   verTodas?.addEventListener('click', () => {
 
-    render(
-      modalList,
-      transactions.length ? transactions : []
-    );
+    render(modalList, transactions, 'Sin movimientos aún');
 
     modal?.classList.remove('hidden');
   });
