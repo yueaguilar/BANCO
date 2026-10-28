@@ -57,6 +57,76 @@ label.small {
   color: var(--muted);
 }
 
+.movement-kind {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 5px 10px;
+  overflow: hidden;
+  border: 1px solid rgba(144, 224, 239, 0.34);
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, rgba(144, 224, 239, 0.16), rgba(144, 224, 239, 0.055));
+  box-shadow:
+    0 3px 12px rgba(0, 0, 0, 0.2),
+    0 0 12px rgba(144, 224, 239, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  color: var(--primary-strong);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+  line-height: 1.2;
+  text-shadow: 0 1px 8px rgba(144, 224, 239, 0.28);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.movement-kind::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  content: '';
+}
+
+.movement-kind.income {
+  border-color: rgba(142, 240, 176, 0.42);
+  background:
+    linear-gradient(135deg, rgba(142, 240, 176, 0.19), rgba(142, 240, 176, 0.055));
+  box-shadow:
+    0 3px 12px rgba(0, 0, 0, 0.2),
+    0 0 14px rgba(142, 240, 176, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  color: var(--success);
+  text-shadow: 0 1px 8px rgba(142, 240, 176, 0.3);
+}
+
+.movement-kind.transfer {
+  border-color: rgba(255, 140, 168, 0.38);
+  background:
+    linear-gradient(135deg, rgba(255, 140, 168, 0.16), rgba(255, 140, 168, 0.045));
+  box-shadow:
+    0 3px 12px rgba(0, 0, 0, 0.2),
+    0 0 12px rgba(255, 140, 168, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  color: var(--danger);
+  text-shadow: 0 1px 8px rgba(255, 140, 168, 0.28);
+}
+
+.tx-item:hover .movement-kind,
+.transaction-item:hover .movement-kind,
+.movement-item:hover .movement-kind {
+  transform: translateY(-1px);
+  box-shadow:
+    0 5px 16px rgba(0, 0, 0, 0.25),
+    0 0 16px currentColor,
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
 /* ===== COMPARTIDO: estructura que se repite en varias pantallas ===== */
 .topbar {
   position: sticky;
