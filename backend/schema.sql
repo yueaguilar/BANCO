@@ -5,10 +5,59 @@ CREATE TABLE IF NOT EXISTS users (
     birthdate DATE,
     phone TEXT,
     password TEXT,
+    role VARCHAR(24) NOT NULL DEFAULT 'customer'
+        CHECK (role IN ('customer', 'admin')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(24) NOT NULL DEFAULT 'customer';
+UPDATE users SET role = 'customer' WHERE role IS NULL OR role NOT IN ('customer', 'admin');
+DO $$
+BEGIN
+    ALTER TABLE users
+    ADD CONSTRAINT users_role_allowed CHECK (role IN ('customer', 'admin'));
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    id UUID PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    refresh_token_hash CHAR(64) NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    last_activity TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    status VARCHAR(16) NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'revoked', 'expired', 'suspicious')),
+    revoked_at TIMESTAMPTZ,
+    device_info JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_status
+    ON auth_sessions (user_id, status, last_activity DESC);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiration
+    ON auth_sessions (expires_at)
+    WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS auth_login_attempts (
+    login_key CHAR(64) PRIMARY KEY,
+    window_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0)
+);
+CREATE INDEX IF NOT EXISTS idx_auth_login_attempts_window
+    ON auth_login_attempts (window_started_at);
+
+CREATE TABLE IF NOT EXISTS auth_audit_log (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    event_type VARCHAR(40) NOT NULL,
+    session_id UUID,
+    ip_address INET,
+    user_agent TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_auth_audit_user_created_at
+    ON auth_audit_log (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS phone_verifications (
     phone VARCHAR(10) PRIMARY KEY,

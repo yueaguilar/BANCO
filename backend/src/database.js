@@ -5,7 +5,7 @@ const connectionString = process.env.DATABASE_URL || null;
 const poolConfig = {};
 if (connectionString) {
     poolConfig.connectionString = connectionString;
-    poolConfig.ssl = { rejectUnauthorized: false };
+    poolConfig.ssl = { rejectUnauthorized: true, minVersion: 'TLSv1.2' };
 } else {
     if (process.env.NODE_ENV === 'production') {
         throw new Error('DATABASE_URL debe estar configurado en producción.');

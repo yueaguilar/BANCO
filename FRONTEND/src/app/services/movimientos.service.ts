@@ -1,4 +1,5 @@
 import { API_URL } from '../api-config';
+import { apiFetch } from './api-fetch';
 
 export interface MovimientoBancario {
   id: number;
@@ -14,15 +15,9 @@ interface RespuestaMovimientos {
   data?: MovimientoBancario[];
 }
 
-export async function obtenerMovimientosBancarios(
-  token: string
-): Promise<MovimientoBancario[]> {
-  if (!token) {
-    throw new Error('Inicia sesión para consultar tus movimientos.');
-  }
-
-  const response = await fetch(`${API_URL}/api/movimientos`, {
-    headers: { Authorization: `Bearer ${token}` }
+export async function obtenerMovimientosBancarios(): Promise<MovimientoBancario[]> {
+  const response = await apiFetch(`${API_URL}/api/movimientos`, {
+    credentials: 'include'
   });
   const result = await response.json() as RespuestaMovimientos;
 

@@ -12,21 +12,22 @@ import { Servicios } from './componentes/servicios-banco/servicios';
 import { Transferir } from './componentes/transferencia.banco/transferir';
 import { Verificacion } from './componentes/veri-banco/veri';
 import { DepositoContador } from './componentes/deposito-contador/deposito-contador';
+import { authGuard } from './services/auth.guard';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'login', pathMatch: 'full' },
   { path: 'login', component: LoginBanco },
-  { path: 'app', component: Principal },
-  { path: 'deposito-contador', component: DepositoContador },
-  { path: 'cuenta', component: Cuenta },
-  { path: 'mas', component: Mas },
-  { path: 'movimientos', component: Movimientos },
-  { path: 'pago', component: Pago },
-  { path: 'qr', component: Qr },
-  { path: 'recarga', component: Recarga },
-  { path: 'scan', component: Scan },
-  { path: 'servicios', component: Servicios },
-  { path: 'transferir', component: Transferir },
+  { path: 'app', component: Principal, canActivate: [authGuard] },
+  { path: 'deposito-contador', component: DepositoContador, canActivate: [authGuard] },
+  { path: 'cuenta', component: Cuenta, canActivate: [authGuard] },
+  { path: 'mas', component: Mas, canActivate: [authGuard] },
+  { path: 'movimientos', component: Movimientos, canActivate: [authGuard] },
+  { path: 'pago', component: Pago, canActivate: [authGuard] },
+  { path: 'qr', component: Qr, canActivate: [authGuard] },
+  { path: 'recarga', component: Recarga, canActivate: [authGuard] },
+  { path: 'scan', component: Scan, canActivate: [authGuard] },
+  { path: 'servicios', component: Servicios, canActivate: [authGuard] },
+  { path: 'transferir', component: Transferir, canActivate: [authGuard] },
   { path: 'verificacion', component: Verificacion },
   { path: '**', redirectTo: 'login' },
 ];

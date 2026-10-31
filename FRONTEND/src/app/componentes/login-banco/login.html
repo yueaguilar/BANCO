@@ -4,7 +4,20 @@
 </div>
 
 <div class="info" *ngIf="step === 'form'">
-    <form id="auth-form" class="login-form" (ngSubmit)="enviarCodigo()" novalidate>
+    <form class="login-form" *ngIf="accountLoginMode" (ngSubmit)="iniciarSesionConCuenta()">
+        <input class="liquid-glass-input" type="text" inputmode="numeric" maxlength="10"
+               name="accountNumber" placeholder="Número de cuenta" [(ngModel)]="accountNumber" required>
+        <input class="liquid-glass-input" type="password" name="accountPassword"
+               placeholder="Contraseña" [(ngModel)]="password" required>
+        <button type="submit" class="correo liquid-glass-btn" [disabled]="loading">
+            {{ loading ? 'Iniciando sesión...' : 'Iniciar sesión' }}
+        </button>
+        <button type="button" class="correo liquid-glass-btn" (click)="accountLoginMode = false">
+            Crear cuenta con verificación SMS
+        </button>
+        <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+    </form>
+    <form id="auth-form" class="login-form" *ngIf="!accountLoginMode" (ngSubmit)="enviarCodigo()" novalidate>
         <input id="email" class="correo liquid-glass-input" type="email" name="email"
                placeholder="Correo electrónico" [(ngModel)]="email">
 
@@ -34,6 +47,10 @@
 
         <button type="submit" class="correo liquid-glass-btn" [disabled]="loading">
             {{ loading ? 'Enviando...' : 'Enviar código SMS' }}
+        </button>
+
+        <button type="button" class="correo liquid-glass-btn" (click)="accountLoginMode = true">
+            Ya tengo cuenta
         </button>
 
         <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>

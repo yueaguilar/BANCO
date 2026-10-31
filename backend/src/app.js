@@ -1,11 +1,10 @@
 require('dotenv').config();
 
-const { createHmac } = require('node:crypto');
+const { createHmac, randomBytes, randomInt } = require('node:crypto');
 const express = require('express');
 const cors = require('cors');
 const pool = require('./database');
 const bcrypt = require('bcrypt');
-const { randomInt } = require('node:crypto');
 const generateAccountNumber = require('./services/accountGenerator');
 const {
     generateCardNumber,
@@ -24,10 +23,22 @@ const {
     VerificationRateLimitError
 } = require('./services/verificationService');
 const { sendSms } = require('./services/textbeeService');
-const jwt = require('jsonwebtoken');
 const counterDepositsRouter = require('./routes/counterDeposits');
 const counterCashDepositsRouter = require('./routes/counterCashDeposits');
 const authenticateUser = require('./middleware/authenticateUser');
+const requireRole = require('./middleware/requireRole');
+const {
+    getTokenConfiguration,
+    getCookieOptions,
+    getAccessToken,
+    getRefreshToken,
+    verifyAccessToken,
+    verifyRefreshToken,
+    createSession,
+    setSessionCookies,
+    clearSessionCookies,
+    rotateRefreshToken
+} = require('./services/sessionService');
 
 const app = express();
 const TEMPORARY_NIP_TTL_MS = 5 * 60 * 1000;
@@ -36,28 +47,107 @@ const TEMPORARY_NIP_LOCK_MS = 15 * 60 * 1000;
 const TEMPORARY_NIP_SUCCESS_INTERVAL_MS = 60 * 1000;
 const SMS_IP_WINDOW_MS = 15 * 60 * 1000;
 const SMS_IP_MAX_REQUESTS = 5;
+const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
 
 const allowedOrigins = new Set([
     'https://bancokike-45795.web.app',
     'https://bancokike-45795.firebaseapp.com',
-    ...(process.env.NODE_ENV === 'production' ? [] : [
+    ...(!isProduction ? [
         'http://localhost:4200',
         'http://127.0.0.1:4200'
-    ]),
+    ] : []),
+    ...String(process.env.FRONTEND_URL || '')
+        .split(',')
+        .map((origin) => origin.trim().replace(/\/$/, ''))
+        .filter(Boolean),
     ...String(process.env.CORS_ALLOWED_ORIGINS || '')
         .split(',')
-        .map((origin) => origin.trim())
+        .map((origin) => origin.trim().replace(/\/$/, ''))
         .filter(Boolean)
 ]);
 
-const isBehindRenderProxy = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+const isBehindRenderProxy = isProduction;
 app.set('trust proxy', isBehindRenderProxy ? 1 : false);
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    if (req.path.startsWith('/api/')) {
+        res.setHeader('Cache-Control', 'no-store');
+    }
+    if (isProduction && req.secure) {
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+    }
+    next();
+});
 app.use(cors({
     origin(origin, callback) {
-        callback(null, !origin || allowedOrigins.has(origin));
-    }
+        callback(null, !origin || allowedOrigins.has(origin.replace(/\/$/, '')));
+    },
+    credentials: true
 }));
 app.use(express.json({ limit: '16kb' }));
+app.use((req, res, next) => {
+    const stateChanging = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+    const carriesSessionCookie = /(?:^|;\s*)banco_(?:access|refresh)=/.test(req.headers.cookie || '');
+    const origin = req.get('origin');
+    if (stateChanging && carriesSessionCookie && (!origin || !allowedOrigins.has(origin.replace(/\/$/, '')))) {
+        return res.status(403).json({ success: false, message: 'El origen de la solicitud no está autorizado.' });
+    }
+    return next();
+});
+
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(32).toString('hex'), 10);
+
+async function writeAuthAudit(userId, eventType, sessionId, req) {
+    await pool.query(
+        `INSERT INTO auth_audit_log (user_id, event_type, session_id, ip_address, user_agent)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [userId || null, eventType, sessionId || null, req.ip || null, String(req.get('user-agent') || '').slice(0, 512)]
+    );
+}
+
+function requireManagedSession(req, res, next) {
+    if (!req.user?.sessionId) {
+        return res.status(401).json({ success: false, message: 'Se requiere una sesión segura actualizada.' });
+    }
+    return next();
+}
+
+function sendSessionResponse(res, sessionData) {
+    if (!sessionData) {
+        return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
+    }
+    return res.json({ success: true, ...sessionData });
+}
+
+function loginAttemptKey(req, accountNumber) {
+    const secret = getTokenConfiguration()?.accessSecret;
+    if (!secret) return null;
+    return createHmac('sha256', secret)
+        .update(`${req.ip || 'unknown'}:${accountNumber}`)
+        .digest('hex');
+}
+
+async function registerFailedLogin(key) {
+    const { rows } = await pool.query(
+        `INSERT INTO auth_login_attempts (login_key, window_started_at, attempts)
+         VALUES ($1, NOW(), 1)
+         ON CONFLICT (login_key) DO UPDATE
+         SET attempts = CASE
+                 WHEN auth_login_attempts.window_started_at <= NOW() - INTERVAL '15 minutes' THEN 1
+                 ELSE auth_login_attempts.attempts + 1
+             END,
+             window_started_at = CASE
+                 WHEN auth_login_attempts.window_started_at <= NOW() - INTERVAL '15 minutes' THEN NOW()
+                 ELSE auth_login_attempts.window_started_at
+             END
+         RETURNING attempts`,
+        [key]
+    );
+    return Number(rows[0]?.attempts || 0);
+}
 
 app.get('/health', async (_req, res) => {
     try {
@@ -90,6 +180,73 @@ async function ensureTables() {
         `);
 
         await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT');
+        await pool.query(`
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS role VARCHAR(24) NOT NULL DEFAULT 'customer'
+        `);
+        await pool.query(`
+            UPDATE users SET role = 'customer'
+            WHERE role IS NULL OR role NOT IN ('customer', 'admin')
+        `);
+        await pool.query(`
+            DO $$
+            BEGIN
+                ALTER TABLE users
+                ADD CONSTRAINT users_role_allowed CHECK (role IN ('customer', 'admin'));
+            EXCEPTION
+                WHEN duplicate_object THEN NULL;
+            END $$
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS auth_sessions (
+                id UUID PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                refresh_token_hash CHAR(64) NOT NULL UNIQUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                expires_at TIMESTAMPTZ NOT NULL,
+                last_activity TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                status VARCHAR(16) NOT NULL DEFAULT 'active'
+                    CHECK (status IN ('active', 'revoked', 'expired', 'suspicious')),
+                revoked_at TIMESTAMPTZ,
+                device_info JSONB NOT NULL DEFAULT '{}'::jsonb
+            )
+        `);
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_status
+            ON auth_sessions (user_id, status, last_activity DESC)
+        `);
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiration
+            ON auth_sessions (expires_at)
+            WHERE status = 'active'
+        `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS auth_login_attempts (
+                login_key CHAR(64) PRIMARY KEY,
+                window_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0)
+            )
+        `);
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_auth_login_attempts_window
+            ON auth_login_attempts (window_started_at)
+        `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS auth_audit_log (
+                id BIGSERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                event_type VARCHAR(40) NOT NULL,
+                session_id UUID,
+                ip_address INET,
+                user_agent TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        `);
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_auth_audit_user_created_at
+            ON auth_audit_log (user_id, created_at DESC)
+        `);
 
         await pool.query(`
             CREATE TABLE IF NOT EXISTS phone_verifications (
@@ -333,7 +490,7 @@ async function getBankDataForUser(userId) {
 
 async function getSessionDataForUser(userId) {
     const { rows } = await pool.query(
-        'SELECT id, fullname, email FROM users WHERE id = $1',
+        'SELECT id, fullname, email, role FROM users WHERE id = $1',
         [userId]
     );
 
@@ -348,7 +505,8 @@ async function getSessionDataForUser(userId) {
         user: {
             id: user.id,
             fullname: user.fullname,
-            email: user.email
+            email: user.email,
+            role: user.role || 'customer'
         },
         bankData
     };
@@ -365,7 +523,222 @@ app.get('/api', (req, res) => {
     res.json({ mensaje: 'API del Banco funcionando' });
 });
 
+app.post('/api/auth/login', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const accountNumber = String(
+        req.body?.accountNumber || req.body?.numeroCuenta || req.body?.numero_cuenta || ''
+    ).trim();
+    const password = req.body?.password;
+
+    if (!/^\d{10}$/.test(accountNumber) || typeof password !== 'string' || password.length === 0) {
+        return res.status(400).json({ success: false, message: 'Ingresa un número de cuenta y una contraseña válidos.' });
+    }
+    if (!getTokenConfiguration()) {
+        return res.status(503).json({ success: false, message: 'La autenticación no está configurada correctamente.' });
+    }
+
+    const attemptKey = loginAttemptKey(req, accountNumber);
+    try {
+        const { rows } = await pool.query(
+            `SELECT u.id, u.fullname, u.email, u.password
+             FROM users u
+             INNER JOIN cuentas c ON c.usuario_id = u.id
+             WHERE c.numero_cuenta = $1
+             LIMIT 1`,
+            [accountNumber]
+        );
+        const accountUser = rows[0];
+        const passwordMatches = await bcrypt.compare(password, accountUser?.password || DUMMY_PASSWORD_HASH);
+        if (!accountUser || !passwordMatches) {
+            const attempts = await registerFailedLogin(attemptKey);
+            if (attempts >= 5) {
+                res.set('Retry-After', '900');
+                if (attempts === 5) {
+                    await writeAuthAudit(accountUser?.id, 'login_blocked', null, req);
+                }
+                return res.status(429).json({
+                    success: false,
+                    message: 'Demasiados intentos de inicio de sesión. Inténtalo de nuevo en 15 minutos.'
+                });
+            }
+            return res.status(401).json({ success: false, message: 'Número de cuenta o contraseña incorrectos.' });
+        }
+
+        await pool.query('DELETE FROM auth_login_attempts WHERE login_key = $1', [attemptKey]);
+        const bankData = await getBankDataForUser(accountUser.id);
+        const session = await createSession(pool, accountUser.id, req);
+        await writeAuthAudit(accountUser.id, 'login', session.sessionId, req);
+        setSessionCookies(res, session, session.expiresAt);
+        return res.json({
+            success: true,
+            message: 'Inicio de sesión exitoso.',
+            user: { id: accountUser.id, fullname: accountUser.fullname, email: accountUser.email },
+            bankData
+        });
+    } catch (error) {
+        console.error('Account login failed:', error?.code || error?.name || 'unknown');
+        return res.status(500).json({ success: false, message: 'No se pudo iniciar sesión.' });
+    }
+});
+
+app.post('/api/auth/refresh', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!getTokenConfiguration()) {
+        return res.status(503).json({ success: false, message: 'La autenticación no está configurada correctamente.' });
+    }
+
+    try {
+        const result = await rotateRefreshToken(pool, getRefreshToken(req));
+        if (!result.ok) {
+            if (result.reuseDetected) {
+                clearSessionCookies(res);
+                await writeAuthAudit(result.userId, 'refresh_reuse', result.sessionId, req);
+            } else {
+                clearSessionCookies(res);
+            }
+            return res.status(result.status).json({
+                success: false,
+                message: result.reuseDetected
+                    ? 'Se detectó la reutilización de una sesión y fue revocada.'
+                    : 'La sesión expiró. Inicia sesión nuevamente.'
+            });
+        }
+
+        setSessionCookies(res, result, result.expiresAt);
+        await writeAuthAudit(result.userId, 'refresh', result.sessionId, req);
+        return res.json({ success: true });
+    } catch (error) {
+        console.error('Session refresh failed:', error?.code || error?.name || 'unknown');
+        return res.status(500).json({ success: false, message: 'No se pudo renovar la sesión.' });
+    }
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        const identity = verifyRefreshToken(getRefreshToken(req))
+            || verifyAccessToken(getAccessToken(req));
+        if (identity) {
+            await pool.query(
+                `UPDATE auth_sessions
+                 SET status = 'revoked', revoked_at = NOW()
+                 WHERE id = $1 AND user_id = $2 AND status = 'active'`,
+                [identity.sessionId, identity.userId]
+            );
+        }
+        clearSessionCookies(res);
+        if (identity) await writeAuthAudit(identity.userId, 'logout', identity.sessionId, req);
+        return res.json({ success: true });
+    } catch (error) {
+        console.error('Session logout failed:', error?.code || error?.name || 'unknown');
+        return res.status(500).json({ success: false, message: 'No se pudo cerrar la sesión.' });
+    }
+});
+
+app.post('/api/auth/logout-all', authenticateUser, requireManagedSession, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        await pool.query(
+            `UPDATE auth_sessions
+             SET status = 'revoked', revoked_at = NOW()
+             WHERE user_id = $1 AND status = 'active'`,
+            [req.user.id]
+        );
+        clearSessionCookies(res);
+        await writeAuthAudit(req.user.id, 'logout_all', req.user.sessionId, req);
+        return res.json({ success: true });
+    } catch (error) {
+        console.error('All-session logout failed:', error?.code || error?.name || 'unknown');
+        return res.status(500).json({ success: false, message: 'No se pudieron cerrar las sesiones.' });
+    }
+});
+
+app.get('/api/auth/me', authenticateUser, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        return sendSessionResponse(res, await getSessionDataForUser(req.user.id));
+    } catch (error) {
+        console.error('Authenticated user lookup failed:', error?.code || error?.name || 'unknown');
+        return res.status(500).json({ success: false, message: 'No se pudo consultar la sesión.' });
+    }
+});
+
+app.get('/api/admin/audit-events', authenticateUser, requireRole('admin'), async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const limit = Number(req.query.limit ?? 50);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+        return res.status(400).json({ success: false, message: 'El límite debe estar entre 1 y 100.' });
+    }
+
+    try {
+        const { rows } = await pool.query(
+            `SELECT id, user_id, event_type, session_id, ip_address, user_agent, created_at
+             FROM auth_audit_log
+             ORDER BY created_at DESC, id DESC
+             LIMIT $1`,
+            [limit]
+        );
+        await writeAuthAudit(req.user.id, 'audit_access', req.user.sessionId, req);
+        return res.json({ success: true, events: rows });
+    } catch (error) {
+        console.error('Audit event lookup failed:', error?.code || error?.name || 'unknown');
+        return res.status(500).json({ success: false, message: 'No se pudo consultar la auditoría.' });
+    }
+});
+
+app.get('/api/auth/sessions', authenticateUser, requireManagedSession, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        await pool.query(
+            `UPDATE auth_sessions
+             SET status = 'expired', revoked_at = NOW()
+             WHERE user_id = $1 AND status = 'active' AND expires_at <= NOW()`,
+            [req.user.id]
+        );
+        const { rows } = await pool.query(
+            `SELECT id, created_at, expires_at, last_activity, status, device_info,
+                    (id = $2::uuid) AS current
+             FROM auth_sessions
+             WHERE user_id = $1 AND status = 'active'
+             ORDER BY last_activity DESC`,
+            [req.user.id, req.user.sessionId]
+        );
+        return res.json({ success: true, sessions: rows });
+    } catch (error) {
+        console.error('Session listing failed:', error?.code || error?.name || 'unknown');
+        return res.status(500).json({ success: false, message: 'No se pudieron consultar las sesiones.' });
+    }
+});
+
+app.delete('/api/auth/sessions/:id', authenticateUser, requireManagedSession, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const sessionId = req.params.id;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
+        return res.status(400).json({ success: false, message: 'El identificador de sesión no es válido.' });
+    }
+
+    try {
+        const { rows } = await pool.query(
+            `UPDATE auth_sessions
+             SET status = 'revoked', revoked_at = NOW()
+             WHERE id = $1 AND user_id = $2 AND status = 'active'
+             RETURNING id`,
+            [sessionId, req.user.id]
+        );
+        if (rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'No se encontró una sesión activa con ese identificador.' });
+        }
+        if (sessionId === req.user.sessionId) clearSessionCookies(res);
+        await writeAuthAudit(req.user.id, 'session_revoked', sessionId, req);
+        return res.json({ success: true });
+    } catch (error) {
+        console.error('Session revocation failed:', error?.code || error?.name || 'unknown');
+        return res.status(500).json({ success: false, message: 'No se pudo revocar la sesión.' });
+    }
+});
+
 app.get('/api/session', authenticateUser, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
     try {
         const session = await getSessionDataForUser(req.user.id);
         if (!session) {
@@ -380,6 +753,7 @@ app.get('/api/session', authenticateUser, async (req, res) => {
 });
 
 app.get('/api/movimientos', authenticateUser, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
     try {
         const { rows } = await pool.query(
             `SELECT m.id, m.tipo, m.monto, m.descripcion, m.created_at
@@ -763,7 +1137,7 @@ app.post('/api/auth', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Debes ingresar tu número de teléfono para continuar.' });
     }
 
-    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+    if (!getTokenConfiguration()) {
         return res.status(503).json({ success: false, message: 'La autenticación no está configurada correctamente.' });
     }
 
@@ -783,14 +1157,10 @@ app.post('/api/auth', async (req, res) => {
                 }
 
                 const bankData = await getBankDataForUser(user.id);
-
-                const token = jwt.sign({}, process.env.JWT_SECRET, {
-                    subject: String(user.id),
-                    issuer: 'banco-kike-api',
-                    audience: 'banco-kike-web',
-                    expiresIn: '1h'
-                });
-                return res.json({ success: true, message: 'Login exitoso', token, user: { id: user.id, fullname: user.fullname, email: user.email }, bankData });
+                const session = await createSession(pool, user.id, req);
+                await writeAuthAudit(user.id, 'login_sms', session.sessionId, req);
+                setSessionCookies(res, session, session.expiresAt);
+                return res.json({ success: true, message: 'Login exitoso', user: { id: user.id, fullname: user.fullname, email: user.email }, bankData });
             }
 
             return res.status(401).json({ success: false, message: 'Contraseña incorrecta' });
@@ -803,18 +1173,14 @@ app.post('/api/auth', async (req, res) => {
         );
 
         const bankData = await createBankAccountForUser(userInsert.rows[0].id);
-        const token = jwt.sign({}, process.env.JWT_SECRET, {
-            subject: String(userInsert.rows[0].id),
-            issuer: 'banco-kike-api',
-            audience: 'banco-kike-web',
-            expiresIn: '1h'
-        });
+        const session = await createSession(pool, userInsert.rows[0].id, req);
+        await writeAuthAudit(userInsert.rows[0].id, 'register', session.sessionId, req);
+        setSessionCookies(res, session, session.expiresAt);
         console.log('Usuario registrado:', { userId: userInsert.rows[0].id, email: normalizedEmail, phone: normalizedPhone });
 
         return res.json({
             success: true,
             message: 'Usuario registrado',
-            token,
             user: {
                 id: userInsert.rows[0].id,
                 fullname: fullname || null,
@@ -829,6 +1195,7 @@ app.post('/api/auth', async (req, res) => {
 });
 
 app.get('/api/balance/:numeroCuenta', authenticateUser, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
     const { numeroCuenta } = req.params;
     const cuenta = String(numeroCuenta || '').trim();
 
@@ -885,18 +1252,34 @@ if (require.main === module) {
     const requiredConfig = [
         ['TEXTBEE_API_KEY', process.env.TEXTBEE_API_KEY, 1],
         ['JWT_SECRET', process.env.JWT_SECRET, 32],
+        ['JWT_ACCESS_SECRET', process.env.JWT_ACCESS_SECRET, 32],
+        ['JWT_REFRESH_SECRET', process.env.JWT_REFRESH_SECRET, 32],
         ['COUNTER_DEVICE_TOKEN', process.env.COUNTER_DEVICE_TOKEN, 32],
         ['SMS_CODE_HMAC_SECRET', process.env.SMS_CODE_HMAC_SECRET, 32],
         ['COUNTER_DEVICE_IDS', configuredDevices.join(','), 1]
     ];
-    if (process.env.NODE_ENV === 'production') {
+    if (isProduction) {
         requiredConfig.push(['DATABASE_URL', process.env.DATABASE_URL, 1]);
+        requiredConfig.push(['FRONTEND_URL', process.env.FRONTEND_URL, 1]);
     }
     const missingConfig = requiredConfig
         .filter(([name, value, minLength]) => !value || String(value).trim().length < minLength)
         .map(([name]) => name);
     if (invalidDeviceIds && !missingConfig.includes('COUNTER_DEVICE_IDS')) {
         missingConfig.push('COUNTER_DEVICE_IDS');
+    }
+    if (!getTokenConfiguration()) {
+        missingConfig.push('JWT_ACCESS_SECRET/JWT_REFRESH_SECRET/JWT_*_EXPIRES_IN');
+    }
+    if (isProduction) {
+        try {
+            const cookieOptions = getCookieOptions();
+            if (!cookieOptions.secure || cookieOptions.sameSite !== 'none') {
+                missingConfig.push('COOKIE_SECURE=true/COOKIE_SAME_SITE=none');
+            }
+        } catch {
+            missingConfig.push('COOKIE_SECURE/COOKIE_SAME_SITE');
+        }
     }
 
     if (missingConfig.length > 0) {
@@ -909,6 +1292,23 @@ if (require.main === module) {
             app.listen(PORT, () => {
                 console.log(`Servidor ejecutándose en http://localhost:${PORT}`);
             });
+            const expireSessions = async () => {
+                try {
+                    await pool.query(
+                        `UPDATE auth_sessions SET status = 'expired', revoked_at = NOW()
+                         WHERE status = 'active' AND expires_at <= NOW()`
+                    );
+                    await pool.query(
+                        `DELETE FROM auth_login_attempts
+                         WHERE window_started_at <= NOW() - INTERVAL '1 day'`
+                    );
+                } catch (error) {
+                    console.error('Expired session cleanup failed:', error?.code || error?.name || 'unknown');
+                }
+            };
+            void expireSessions();
+            const sessionCleanup = setInterval(expireSessions, 15 * 60 * 1000);
+            sessionCleanup.unref();
         })
         .catch((err) => {
             console.error('Error inicializando la aplicación:', err?.code || err?.name || 'unknown');

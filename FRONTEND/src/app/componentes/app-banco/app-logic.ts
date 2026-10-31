@@ -19,6 +19,7 @@ interface SessionResponse {
   bankData: BankData;
 }
 import { API_URL } from '../../api-config';
+import { apiFetch } from '../../services/api-fetch';
 import {
   obtenerMovimientosBancarios,
   renderizarEstadoVacio,
@@ -80,77 +81,19 @@ export async function iniciarApp(): Promise<void> {
     }).format(Number(value || 0));
 
   const loadSession = async (): Promise<Session> => {
-
-    let parsedUser: User | null = null;
-    let parsedBank: BankData | null = null;
-    const token = localStorage.getItem('sessionToken') || '';
-
     try {
-      const storedUser = localStorage.getItem('user');
-      const storedBank = localStorage.getItem('bankData');
-
-      parsedUser = storedUser
-        ? JSON.parse(storedUser) as User
-        : null;
-
-      parsedBank = storedBank
-        ? JSON.parse(storedBank) as BankData
-        : null;
-
-    } catch (error) {
-      parsedUser = null;
-      parsedBank = null;
-    }
-
-    if (!token) {
-      return {
-        user: null,
-        bankData: null
-      };
-    }
-
-    if (token) {
-
-      try {
-
-        const response = await fetch(`${API_URL}/api/session`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        const data = await response.json() as SessionResponse;
-
-        if (response.ok && data.success) {
-
-          localStorage.setItem(
-            'user',
-            JSON.stringify(data.user)
-          );
-
-          localStorage.setItem(
-            'bankData',
-            JSON.stringify(data.bankData)
-          );
-
-          return {
-            user: data.user,
-            bankData: data.bankData
-          };
-        }
-
-      } catch (error) {
-
-        console.warn(
-          'No se pudo actualizar la sesión desde la base de datos',
-          error
-        );
-
+      const response = await apiFetch(`${API_URL}/api/auth/me`);
+      const data = await response.json() as SessionResponse;
+      if (response.ok && data.success) {
+        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('bankData', JSON.stringify(data.bankData));
+        return { user: data.user, bankData: data.bankData };
       }
+    } catch (error) {
+      console.warn('No se pudo actualizar la sesión desde la base de datos', error);
     }
 
-    return {
-      user: parsedUser,
-      bankData: parsedBank
-    };
+    return { user: null, bankData: null };
   };
 
   let transactions: MovimientoBancario[] = [];
@@ -190,11 +133,9 @@ export async function iniciarApp(): Promise<void> {
     });
   };
 
-  if (localStorage.getItem('sessionToken')) {
+  if (session.user) {
     try {
-      transactions = await obtenerMovimientosBancarios(
-        localStorage.getItem('sessionToken') || ''
-      );
+      transactions = await obtenerMovimientosBancarios();
       render(txList, transactions.slice(0, 3), 'Sin movimientos aún');
     } catch (error) {
       console.error('No se pudo cargar el historial bancario.', error);

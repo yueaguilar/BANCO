@@ -78,6 +78,13 @@ Crear un archivo `.env` en `backend/.env` con al menos:
 PORT=3000
 DATABASE_URL=postgresql://usuario:password@host:5432/dbname?sslmode=require
 JWT_SECRET=una_clave_segura_de_al_menos_32_caracteres
+JWT_ACCESS_SECRET=
+JWT_REFRESH_SECRET=
+JWT_ACCESS_EXPIRES_IN=10m
+JWT_REFRESH_EXPIRES_IN=7d
+COOKIE_SECURE=true
+COOKIE_SAME_SITE=none
+FRONTEND_URL=https://bancokike-45795.web.app
 TEXTBEE_API_KEY=tu_api_key_de_textbee
 SMS_CODE_HMAC_SECRET=configurar_como_secreto_privado_de_al_menos_32_bytes
 COUNTER_DEVICE_TOKEN=token-secreto-para-dispositivos
@@ -85,8 +92,11 @@ COUNTER_DEVICE_IDS=CONTADOR_KIKE_01,CNT-001,contador-arduino-01
 ```
 
 No guardes ni subas credenciales al repositorio. El archivo `.env` debe permanecer ignorado por Git.
-En producción, configura `DATABASE_URL`, `JWT_SECRET`, `COUNTER_DEVICE_TOKEN`, `COUNTER_DEVICE_IDS`, `TEXTBEE_API_KEY` y `SMS_CODE_HMAC_SECRET` en las variables privadas del servicio backend en Render. `JWT_SECRET`, `COUNTER_DEVICE_TOKEN` y `SMS_CODE_HMAC_SECRET` deben tener al menos 32 caracteres; genera valores aleatorios para los secretos. No los incluyas en Angular ni en Firebase Hosting.
-La API acepta CORS desde los sitios de producción `bancokike-45795.web.app` y `bancokike-45795.firebaseapp.com`; en desarrollo local también permite `localhost:4200` y `127.0.0.1:4200`. Para un dominio oficial adicional, configura `CORS_ALLOWED_ORIGINS` con orígenes exactos separados por comas. El endpoint de envío de SMS admite hasta cinco solicitudes por IP cada 15 minutos y conserva el límite adicional de un envío por teléfono cada minuto.
+En producción, configura las variables en el servicio privado del backend en Render. `JWT_ACCESS_SECRET` y `JWT_REFRESH_SECRET` deben ser distintos, aleatorios y tener al menos 32 caracteres; genera cada uno de forma independiente (por ejemplo, con `openssl rand -base64 48`). No pongas los secretos en Angular, Firebase Hosting ni GitHub. `JWT_SECRET` se conserva para compatibilidad con el flujo del contador; no se usa para firmar las nuevas sesiones web.
+
+El frontend Firebase y la API Render son orígenes distintos: usa `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=none` y configura `FRONTEND_URL` con el origen exacto del sitio (sin ruta). CORS habilita credenciales únicamente para los orígenes permitidos, y las mutaciones con cookies validan el encabezado `Origin`. Para desarrollo local usa `COOKIE_SECURE=false` y `COOKIE_SAME_SITE=lax`. El backend admite expiraciones de Access Token de 5 a 10 minutos y Refresh Token de hasta 7 días.
+
+La autenticación web guarda los JWT únicamente en cookies `HttpOnly`; el Refresh Token se almacena como hash en `auth_sessions` y se rota en cada renovación. El servicio revoca la sesión si detecta la reutilización de un token anterior y elimina automáticamente las sesiones expiradas. El endpoint de envío de SMS admite hasta cinco solicitudes por IP cada 15 minutos y conserva el límite adicional de un envío por teléfono cada minuto.
 
 ---
 
@@ -95,6 +105,14 @@ La API acepta CORS desde los sitios de producción `bancokike-45795.web.app` y `
 Rutas relevantes:
 
 - `POST /api/auth` — registro e inicio de sesión
+- `POST /api/auth/login` — inicio de sesión con número de cuenta y contraseña
+- `POST /api/auth/refresh` — rotación del Refresh Token y emisión de un nuevo Access Token
+- `POST /api/auth/logout` — cierre de la sesión actual
+- `POST /api/auth/logout-all` — cierre de todas las sesiones de la cuenta
+- `GET /api/auth/me` — información del usuario autenticado
+- `GET /api/auth/sessions` — sesiones activas y dispositivo/navegador
+- `DELETE /api/auth/sessions/:id` — revocación de una sesión propia
+- `GET /api/admin/audit-events` — consulta de auditoría, solo rol `admin` (límite 1–100)
 - `GET /health` — comprobación de disponibilidad de la API y PostgreSQL
 - `GET /api/session` — sesión autenticada del usuario actual
 - `GET /api/balance/:numeroCuenta` — consulta del saldo solo para la cuenta propia
@@ -519,6 +537,55 @@ La validación del depósito exige que la cuenta pertenezca al usuario. El servi
 El repositorio incluye el bridge Ubuntu y pruebas de su cola/reintentos, pero aún no contiene firmware de Arduino. La implementación serial entre placas y las pruebas físicas de sensores/servos/W5100 requieren el hardware y su asignación real de pines; no se debe conectar el W5100 directamente a Render con HTTP sin cifrar.
 
 Firebase Hosting reescribe rutas de la SPA a `index.html`; el frontend usa la URL HTTPS de Render para las llamadas API. No hay un proxy de API de Firebase ni una Firebase Function para este backend.
+
+---
+
+## Seguridad y recuperación operativa
+
+Estos controles implementan medidas técnicas alineadas con NIST CSF 2.0 e ISO/IEC 27001:2022; no constituyen una certificación ni sustituyen el análisis de riesgos, la gestión de proveedores, la respuesta organizacional a incidentes o la validación independiente.
+
+### Controles aplicados en el código
+
+- Las cookies de autenticación son `HttpOnly`; las mutaciones con cookie requieren un `Origin` permitido. El backend limita el cuerpo JSON y registra eventos de autenticación, revocación y depósitos confirmados sin guardar contraseñas, NIP ni tokens.
+- El middleware existente limita intentos de login/NIP/SMS y revoca sesiones si se reutiliza un refresh token invalidado. Los eventos sospechosos `refresh_reuse` y `login_blocked` quedan en `auth_audit_log`.
+- La tabla `users.role` asigna `customer` por defecto. El middleware consulta el rol vigente en PostgreSQL —no confía en claims del JWT— y deniega el acceso por defecto. `GET /api/admin/audit-events` solo permite el rol `admin`, devuelve como máximo 100 eventos y no expone secretos de autenticación.
+- Las respuestas de API se marcan `Cache-Control: no-store`; el backend añade cabeceras anti-sniffing, anti-framing, política de referer y HSTS cuando Render confirma HTTPS. Firebase Hosting publica CSP, HSTS y cabeceras de seguridad para la SPA.
+- Las conexiones del backend a PostgreSQL validan el certificado TLS y requieren TLS 1.2 o posterior. `DATABASE_URL` debe usar `sslmode=require`.
+
+Para conceder auditoría administrativa, verificar la identidad del operador y ejecutar manualmente en Neon:
+
+```sql
+UPDATE users SET role = 'admin' WHERE id = <ID_VERIFICADO>;
+```
+
+Para retirar el permiso:
+
+```sql
+UPDATE users SET role = 'customer' WHERE id = <ID_VERIFICADO>;
+```
+
+No existe una ruta pública para asignar roles. Limitar esta operación a personal autorizado y proteger el acceso a Neon con MFA y mínimo privilegio. El backend de este proyecto ejecuta cambios de esquema al iniciar; antes de restringir permisos DDL de su rol de conexión, las migraciones deberán separarse de la cuenta de ejecución.
+
+### TLS y endurecimiento de proveedores
+
+Firebase Hosting y Render terminan TLS en sus plataformas. Mantener el tráfico público exclusivamente por HTTPS; verificar en los paneles de ambos proveedores que los certificados estén vigentes y que TLS 1.2/1.3 esté habilitado. El proceso Node no controla la versión TLS del terminador Render. No habilitar contenido mixto ni publicar secretos en Angular, Firebase Hosting o GitHub. Revisar la CSP después de agregar orígenes, scripts o servicios externos.
+
+En Neon, habilitar la protección de red disponible para el proyecto, no exponer credenciales de base de datos en el frontend, usar una contraseña exclusiva y rotarla ante sospecha. La conexión del servidor valida certificados; no desactivar la validación TLS. Limitar las credenciales de Neon al servicio backend y custodiar su acceso con MFA.
+
+### Respaldos y recuperación
+
+La aplicación no puede activar respaldos administrados de Neon ni elegir un destino externo sin acceso al proyecto y a sus credenciales. En el panel de Neon, habilitar PITR/retención de respaldos según el plan y los objetivos de recuperación aprobados; comprobar que la retención cubra la ventana requerida. Para una copia independiente, configurar un trabajo programado de exportación cifrada a almacenamiento fuera de Neon, con acceso separado, retención definida y alertas ante fallos. No almacenar volcados en GitHub ni en Firebase Hosting.
+
+Probar periódicamente la restauración en una rama/base aislada, validar cuentas, saldos, movimientos, depósitos y restricciones antes de cambiar Render a la base restaurada. Registrar el tiempo de recuperación y el punto de datos recuperado; nunca ensayar sobre producción.
+
+### Guía inicial de respuesta a incidentes
+
+1. Contener: restringir temporalmente el servicio afectado en Render/Neon, preservar logs y revisar `auth_audit_log` desde una sesión administrativa segura.
+2. Revocar: cerrar las sesiones del usuario afectado; ante compromiso amplio, rotar los secretos JWT, credenciales Neon, tokens de dispositivo/bridge y claves SMS comprometidos. La rotación de secretos invalida tokens firmados con los valores anteriores.
+3. Recuperar: si hubo alteración o pérdida de datos, restaurar a una rama aislada desde el punto aprobado; validar integridad e idempotencia de depósitos antes de cambiar `DATABASE_URL`.
+4. Volver al servicio: revisar accesos, CORS, cookies, logs y conectividad HTTPS; reabrir el tráfico gradualmente y documentar cronología, alcance, decisiones y acciones correctivas.
+
+La notificación a usuarios, los plazos regulatorios, los responsables de guardia y los objetivos RTO/RPO deben definirse por los responsables del proyecto; este repositorio no puede activarlos por sí solo.
 
 ---
 

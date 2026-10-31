@@ -310,6 +310,11 @@ router.post('/api/depositos/contador/confirmar', authenticateUser, async (req, r
              RETURNING operacion_id, estado, importe, saldo_resultante, confirmado_at`,
             [operacionId, balanceResult.rows[0].saldo]
         );
+        await client.query(
+            `INSERT INTO auth_audit_log (user_id, event_type, session_id, ip_address, user_agent)
+             VALUES ($1, 'deposit_confirmed', $2, $3, $4)`,
+            [req.user.id, req.user.sessionId, req.ip || null, String(req.get('user-agent') || '').slice(0, 512)]
+        );
         await client.query('COMMIT');
 
         return res.json({

@@ -94,6 +94,40 @@
             </li>
         </ul>
     </section>
+
+    <section class="panel glass-card" aria-labelledby="sessions-title">
+        <div class="panel-header">
+            <h3 id="sessions-title">Sesiones activas</h3>
+            <button class="link-btn" type="button" (click)="cargarSesiones()" [disabled]="sessionsLoading">
+                {{ sessionsLoading ? 'Actualizando…' : 'Actualizar' }}
+            </button>
+        </div>
+        <p class="error" *ngIf="sessionsError" role="alert">{{ sessionsError }}</p>
+        <p class="muted" *ngIf="sessionsLoading">Consultando sesiones…</p>
+        <p class="muted" *ngIf="!sessionsLoading && sessions.length === 0">No hay sesiones activas disponibles.</p>
+        <ul class="info-list" *ngIf="sessions.length > 0">
+            <li *ngFor="let session of sessions">
+                <span>
+                    <strong>{{ session.device_info.browser || 'Navegador desconocido' }} · {{ session.device_info.platform || 'Dispositivo desconocido' }}</strong>
+                    <small>Última actividad: {{ session.last_activity | date:'medium' }}</small>
+                    <small>Expira: {{ session.expires_at | date:'medium' }}</small>
+                    <small *ngIf="session.current">Este dispositivo</small>
+                </span>
+                <button class="link-btn" type="button" [disabled]="sessionActionId === session.id"
+                        (click)="cerrarSesion(session.id, session.current)">
+                    {{ sessionActionId === session.id ? 'Cerrando…' : 'Cerrar sesión' }}
+                </button>
+            </li>
+        </ul>
+        <div class="service-list">
+            <button class="service-item" type="button" (click)="cerrarSesionActual()" [disabled]="signingOut">
+                <span>Cerrar sesión actual</span>
+            </button>
+            <button class="service-item" type="button" (click)="cerrarTodasLasSesiones()" [disabled]="signingOut">
+                <span>Cerrar todas las sesiones</span>
+            </button>
+        </div>
+    </section>
 </main>
 
 <nav class="bottom-nav">

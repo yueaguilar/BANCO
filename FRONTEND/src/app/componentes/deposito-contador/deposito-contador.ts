@@ -28,7 +28,6 @@ const CLAVE_OPERACION_PENDIENTE = 'pendingCounterDeposit';
   styleUrls: ['./deposito-contador.css']
 })
 export class DepositoContador {
-  token = '';
   numeroCuenta = '';
   denominacion = 100;
   contadorId: number | null = null;
@@ -49,7 +48,6 @@ export class DepositoContador {
 
   constructor(private readonly contadorService: ContadorService) {
     if (typeof localStorage !== 'undefined') {
-      this.token = localStorage.getItem('sessionToken') || '';
       try {
         const bankData = JSON.parse(localStorage.getItem('bankData') || 'null') as { numeroCuenta?: string } | null;
         this.numeroCuenta = String(bankData?.numeroCuenta || '');
@@ -73,8 +71,8 @@ export class DepositoContador {
       }
     }
     void this.comprobarConexion();
-    if (this.token) void this.cargarConteos();
-    if (this.token && this.operacionId && !this.resumen) {
+    void this.cargarConteos();
+    if (this.operacionId && !this.resumen) {
       void this.validarDeposito();
     }
   }
@@ -85,18 +83,17 @@ export class DepositoContador {
 
   get formularioValido(): boolean {
     const hasValidCount = Number.isSafeInteger(this.contadorId) && Number(this.contadorId) > 0;
-    return Boolean(this.token)
-      && /^\d{10}$/.test(this.numeroCuenta.trim())
+    return /^\d{10}$/.test(this.numeroCuenta.trim())
       && hasValidCount
       && (this.denominacion === 20 || this.denominacion === 50 || this.denominacion === 100 || this.denominacion === 200 || this.denominacion === 500)
       && (Boolean(this.solicitudPendiente) || Boolean(this.conteoSeleccionado));
   }
 
   async cargarConteos(): Promise<void> {
-    if (!this.token || this.cargandoConteos) return;
+    if (this.cargandoConteos) return;
     this.cargandoConteos = true;
     try {
-      this.conteos = await this.contadorService.obtenerConteosPendientes(this.token);
+      this.conteos = await this.contadorService.obtenerConteosPendientes();
     } catch (error) {
       this.error = true;
       this.mensaje = error instanceof Error ? error.message : 'No se pudieron cargar los conteos.';
@@ -125,7 +122,7 @@ export class DepositoContador {
         throw new Error('No se pudo recuperar la solicitud pendiente. No se envió el depósito.');
       }
       localStorage.setItem(CLAVE_OPERACION_PENDIENTE, JSON.stringify(this.solicitudPendiente));
-      this.resumen = await this.contadorService.validarDeposito(this.token, {
+      this.resumen = await this.contadorService.validarDeposito({
         operacion_id: this.solicitudPendiente.operacionId,
         numero_cuenta: this.solicitudPendiente.numeroCuenta,
         contador_id: this.solicitudPendiente.contadorId,
@@ -148,7 +145,7 @@ export class DepositoContador {
     this.mensaje = '';
     this.error = false;
     try {
-      const resultado = await this.contadorService.confirmarDeposito(this.token, this.operacionId);
+      const resultado = await this.contadorService.confirmarDeposito(this.operacionId);
       let saldoActualizado = true;
       if (typeof resultado.saldo === 'number') {
         this.saldoActualizado = resultado.saldo;
@@ -182,7 +179,7 @@ export class DepositoContador {
     this.confirmando = true;
     this.error = false;
     try {
-      await this.contadorService.cancelarValidacion(this.token, this.operacionId);
+      await this.contadorService.cancelarValidacion(this.operacionId);
       this.resumen = null;
       this.operacionId = '';
       this.solicitudPendiente = null;
@@ -220,7 +217,7 @@ export class DepositoContador {
 
   private async actualizarMovimientos(): Promise<boolean> {
     try {
-      const movimientos: MovimientoBancario[] = await this.contadorService.obtenerMovimientos(this.token);
+      const movimientos: MovimientoBancario[] = await this.contadorService.obtenerMovimientos();
       localStorage.setItem('bankMovements', JSON.stringify(movimientos));
       return true;
     } catch (error) {
@@ -232,7 +229,7 @@ export class DepositoContador {
   private async recuperarEstadoOperacion(): Promise<boolean> {
     if (!this.operacionId) return false;
     try {
-      const operation = await this.contadorService.obtenerDeposito(this.token, this.operacionId);
+      const operation = await this.contadorService.obtenerDeposito(this.operacionId);
       if (operation.estado === 'pendiente') {
         this.resumen = operation;
         if (this.solicitudPendiente) {

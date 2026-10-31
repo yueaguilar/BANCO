@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { API_URL } from '../api-config';
+import { apiFetch } from './api-fetch';
 
 export interface RegistroContador {
   id: number;
@@ -45,16 +46,14 @@ export class ApiRequestError extends Error {
 
 @Injectable({ providedIn: 'root' })
 export class ContadorService {
-  async obtenerConteosPendientes(token: string): Promise<RegistroContador[]> {
+  async obtenerConteosPendientes(): Promise<RegistroContador[]> {
     const data = await this.request<ApiResponse<RegistroContador[]>>(
-      '/api/contador/pendientes',
-      token
+      '/api/contador/pendientes'
     );
     return data.data ?? [];
   }
 
   async validarDeposito(
-    token: string,
     payload: {
       operacion_id: string;
       numero_cuenta: string;
@@ -64,7 +63,6 @@ export class ContadorService {
   ): Promise<DepositoContador> {
     const data = await this.request<ApiResponse<DepositoContador>>(
       '/api/depositos/contador/validar',
-      token,
       'POST',
       payload
     );
@@ -72,10 +70,9 @@ export class ContadorService {
     return data.data;
   }
 
-  async confirmarDeposito(token: string, operacionId: string): Promise<DepositoContador & { saldo?: number }> {
+  async confirmarDeposito(operacionId: string): Promise<DepositoContador & { saldo?: number }> {
     const data = await this.request<ApiResponse<DepositoContador & { saldo?: number }>>(
       '/api/depositos/contador/confirmar',
-      token,
       'POST',
       { operacion_id: operacionId }
     );
@@ -83,27 +80,24 @@ export class ContadorService {
     return data.data;
   }
 
-  async cancelarValidacion(token: string, operacionId: string): Promise<void> {
+  async cancelarValidacion(operacionId: string): Promise<void> {
     await this.request<ApiResponse<unknown>>(
       '/api/depositos/contador/cancelar',
-      token,
       'POST',
       { operacion_id: operacionId }
     );
   }
 
-  async obtenerMovimientos(token: string): Promise<MovimientoBancario[]> {
+  async obtenerMovimientos(): Promise<MovimientoBancario[]> {
     const data = await this.request<ApiResponse<MovimientoBancario[]>>(
-      '/api/movimientos',
-      token
+      '/api/movimientos'
     );
     return data.data ?? [];
   }
 
-  async obtenerDeposito(token: string, operacionId: string): Promise<DepositoContador> {
+  async obtenerDeposito(operacionId: string): Promise<DepositoContador> {
     const data = await this.request<ApiResponse<DepositoContador>>(
       `/api/depositos/contador/${encodeURIComponent(operacionId)}`,
-      token
     );
     if (!data.data) throw new Error('El servidor no devolvió el estado del depósito.');
     return data.data;
@@ -116,14 +110,12 @@ export class ContadorService {
 
   private async request<T>(
     path: string,
-    token: string,
     method = 'GET',
     body?: object
   ): Promise<T> {
-    const response = await fetch(`${API_URL}${path}`, {
+    const response = await apiFetch(`${API_URL}${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${token}`,
         ...(body ? { 'Content-Type': 'application/json' } : {})
       },
       ...(body ? { body: JSON.stringify(body) } : {})

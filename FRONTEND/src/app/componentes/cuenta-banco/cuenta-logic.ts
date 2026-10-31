@@ -19,6 +19,7 @@ interface SessionData {
   success?: boolean;
 }
 import { API_URL } from '../../api-config';
+import { apiFetch } from '../../services/api-fetch';
 import {
   esIngreso,
   obtenerMovimientosBancarios,
@@ -39,47 +40,10 @@ export async function iniciarApp(): Promise<() => void> {
     }).format(Number(value || 0));
   };
 
-  const readLocalSession = (): SessionData => {
-    try {
-      const storedUser = localStorage.getItem('user');
-      const storedBankData = localStorage.getItem('bankData');
-
-      const bankData = storedBankData
-        ? JSON.parse(storedBankData) as BankData
-        : null;
-
-      if (bankData && 'nip' in bankData) {
-        delete bankData['nip'];
-        localStorage.setItem('bankData', JSON.stringify(bankData));
-      }
-
-      return {
-        user: storedUser
-          ? JSON.parse(storedUser) as User
-          : null,
-
-        bankData
-      };
-
-    } catch (error) {
-      console.warn(
-        'No se pudo leer la sesión local',
-        error
-      );
-
-      return {
-        user: null,
-        bankData: null
-      };
-    }
-  };
-
   // Pide la sesión al servidor con tiempo límite
   // para evitar que la página se quede en "Cargando..."
 
-  const fetchSession = async (
-    token: string
-  ): Promise<SessionData | null> => {
+  const fetchSession = async (): Promise<SessionData | null> => {
 
     const controller = new AbortController();
 
@@ -89,8 +53,7 @@ export async function iniciarApp(): Promise<() => void> {
 
     try {
 
-      const response = await fetch(`${API_URL}/api/session`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const response = await apiFetch(`${API_URL}/api/auth/me`, {
         signal: controller.signal
       });
 
@@ -396,17 +359,9 @@ export async function iniciarApp(): Promise<() => void> {
 
   const loadAccountMovements = async (): Promise<void> => {
     const list = document.getElementById('transactionList');
-    const token = localStorage.getItem('sessionToken') || '';
     if (!list) return;
-    if (!token) {
-      list.replaceChildren(
-        renderizarEstadoVacio('cuenta', 'Inicia sesión para ver tu historial real')
-      );
-      return;
-    }
-
     try {
-      accountMovements = await obtenerMovimientosBancarios(token);
+      accountMovements = await obtenerMovimientosBancarios();
       list.replaceChildren();
       if (accountMovements.length) {
         accountMovements.slice(0, 3).forEach((movement) => {
@@ -572,8 +527,7 @@ export async function iniciarApp(): Promise<() => void> {
 
   const displayTemporaryNip = (
     code: string,
-    durationSeconds: number,
-    sessionToken: string
+    durationSeconds: number
   ): void => {
     clearTemporaryNip();
     if (!temporaryNipCode || !temporaryNipResult || !temporaryNipCountdown) return;
@@ -582,11 +536,6 @@ export async function iniciarApp(): Promise<() => void> {
     temporaryNipResult.hidden = false;
     temporaryNipExpiresAt = Date.now() + durationSeconds * 1000;
     const updateCountdown = (): void => {
-      if (localStorage.getItem('sessionToken') !== sessionToken) {
-        closeTemporaryNipModal();
-        return;
-      }
-
       const remainingSeconds = Math.max(
         0,
         Math.ceil((temporaryNipExpiresAt - Date.now()) / 1000)
@@ -621,22 +570,15 @@ export async function iniciarApp(): Promise<() => void> {
     event.preventDefault();
     if (!temporaryNipPassword || !temporaryNipConfirm) return;
 
-    const token = localStorage.getItem('sessionToken') || '';
-    if (!token) {
-      showTemporaryNipError('Tu sesión no es válida. Inicia sesión nuevamente.');
-      return;
-    }
-
     if (temporaryNipError) temporaryNipError.hidden = true;
     temporaryNipConfirm.disabled = true;
     const controller = new AbortController();
     temporaryNipRequestController = controller;
     try {
-      const response = await fetch(`${API_URL}/api/account/temporary-nip`, {
+      const response = await apiFetch(`${API_URL}/api/account/temporary-nip`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         cache: 'no-store',
         signal: controller.signal,
@@ -671,13 +613,13 @@ export async function iniciarApp(): Promise<() => void> {
       ) {
         return;
       }
-      if (localStorage.getItem('sessionToken') !== token) {
+      if (!localStorage.getItem('user')) {
         closeTemporaryNipModal();
         return;
       }
 
       temporaryNipPassword.value = '';
-      displayTemporaryNip(data.code, Math.min(data.expiresInSeconds!, 300), token);
+      displayTemporaryNip(data.code, Math.min(data.expiresInSeconds!, 300));
     } catch {
       if (!controller.signal.aborted) {
         showTemporaryNipError('No se pudo conectar con el servidor. Inténtalo nuevamente.');
@@ -707,7 +649,7 @@ export async function iniciarApp(): Promise<() => void> {
     }
   };
   const handleSessionStorageChange = (event: StorageEvent): void => {
-    if (event.key === 'sessionToken' && event.newValue !== event.oldValue) {
+    if (event.key === 'user' && event.newValue === null) {
       closeTemporaryNipModal();
     }
   };
@@ -744,25 +686,8 @@ export async function iniciarApp(): Promise<() => void> {
   // SESIÓN
   // ==========================================
 
-  const local =
-    readLocalSession();
-
-  const token = localStorage.getItem('sessionToken') || '';
-  const needsFetch = Boolean(token);
-
-  if (!needsFetch) {
-
-    render(
-      local.user,
-      local.bankData
-    );
-
-    await loadAccountMovements();
-    return cleanup;
-  }
-
   const data =
-    await fetchSession(token);
+    await fetchSession();
 
   if (data) {
 
@@ -794,8 +719,8 @@ export async function iniciarApp(): Promise<() => void> {
   } else {
 
     render(
-      local.user,
-      local.bankData
+      null,
+      null
     );
   }
 

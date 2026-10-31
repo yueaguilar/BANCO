@@ -11,17 +11,33 @@ async function createRig(t) {
   const originalFetch = global.fetch;
   const originalApiKey = process.env.TEXTBEE_API_KEY;
   const originalJwtSecret = process.env.JWT_SECRET;
+  const originalAccessSecret = process.env.JWT_ACCESS_SECRET;
+  const originalRefreshSecret = process.env.JWT_REFRESH_SECRET;
   const originalHmacSecret = process.env.SMS_CODE_HMAC_SECRET;
   const records = new Map();
   const ipLimits = new Map();
+  const loginAttempts = new Map();
   const authQueries = [];
   const passwordHash = await bcrypt.hash('valid-password', 4);
 
   process.env.TEXTBEE_API_KEY = 'route-test-key';
   process.env.JWT_SECRET = 'route-test-secret-with-at-least-32-characters';
+  process.env.JWT_ACCESS_SECRET = 'route-test-access-secret-with-at-least-32-characters';
+  process.env.JWT_REFRESH_SECRET = 'route-test-refresh-secret-with-at-least-32-characters';
   process.env.SMS_CODE_HMAC_SECRET = 'route-test-hmac-secret-with-at-least-32-characters';
   pool.query = async (sql, params = []) => {
     const query = String(sql);
+    if (query.includes('INSERT INTO auth_sessions') || query.includes('INSERT INTO auth_audit_log')) {
+      return { rows: [] };
+    }
+    if (query.includes('DELETE FROM auth_login_attempts')) {
+      return { rows: [] };
+    }
+    if (query.includes('INSERT INTO auth_login_attempts')) {
+      const attempts = (loginAttempts.get(params[0]) || 0) + 1;
+      loginAttempts.set(params[0], attempts);
+      return { rows: [{ attempts }] };
+    }
     if (query.includes('INSERT INTO sms_ip_rate_limits')) {
       const ipKey = params[0];
       const rate = ipLimits.get(ipKey) || {
@@ -77,6 +93,18 @@ async function createRig(t) {
       return { rows: [] };
     }
     authQueries.push(query);
+    if (query.includes('INNER JOIN cuentas c')) {
+      return params[0] === '1234567890'
+        ? {
+          rows: [{
+            id: 1,
+            fullname: 'Demo',
+            email: 'demo@example.com',
+            password: passwordHash
+          }]
+        }
+        : { rows: [] };
+    }
     if (query.includes('SELECT * FROM users WHERE email = $1')) {
       if (params[0] === 'nuevo@example.com') {
         return { rows: [] };
@@ -157,6 +185,10 @@ async function createRig(t) {
     else process.env.TEXTBEE_API_KEY = originalApiKey;
     if (originalJwtSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = originalJwtSecret;
+    if (originalAccessSecret === undefined) delete process.env.JWT_ACCESS_SECRET;
+    else process.env.JWT_ACCESS_SECRET = originalAccessSecret;
+    if (originalRefreshSecret === undefined) delete process.env.JWT_REFRESH_SECRET;
+    else process.env.JWT_REFRESH_SECRET = originalRefreshSecret;
     if (originalHmacSecret === undefined) delete process.env.SMS_CODE_HMAC_SECRET;
     else process.env.SMS_CODE_HMAC_SECRET = originalHmacSecret;
   });
@@ -237,7 +269,9 @@ test('verification routes use SMS, reject bad/reused codes, and require the veri
   const loginBody = await login.json();
   assert.equal(login.status, 200);
   assert.equal(loginBody.success, true);
-  assert.equal(typeof loginBody.token, 'string');
+  assert.equal('token' in loginBody, false);
+  assert.match(login.headers.get('set-cookie') || '', /banco_access=.*HttpOnly/);
+  assert.match(login.headers.get('set-cookie') || '', /banco_refresh=.*HttpOnly/);
   assert.equal(loginBody.bankData.numeroCuenta, '1234567890');
 
   const reusedVerification = await post(rig.fetch, rig.url, '/api/auth', {
@@ -246,6 +280,37 @@ test('verification routes use SMS, reject bad/reused codes, and require the veri
     phone: '+52 55 1234 5678'
   });
   assert.equal(reusedVerification.status, 401);
+});
+
+test('account login creates HttpOnly cookies and limits failed credential attempts', async (t) => {
+  const rig = await createRig(t);
+  const login = await post(rig.fetch, rig.url, '/api/auth/login', {
+    accountNumber: '1234567890',
+    password: 'valid-password'
+  });
+  const loginBody = await login.json();
+  assert.equal(login.status, 200);
+  assert.equal(loginBody.success, true);
+  assert.equal('token' in loginBody, false);
+  assert.equal(loginBody.bankData.numeroCuenta, '1234567890');
+  assert.match(login.headers.get('set-cookie') || '', /banco_access=.*HttpOnly/);
+  assert.match(login.headers.get('set-cookie') || '', /banco_refresh=.*HttpOnly/);
+
+  const invalidFormat = await post(rig.fetch, rig.url, '/api/auth/login', {
+    accountNumber: '123',
+    password: 'valid-password'
+  });
+  assert.equal(invalidFormat.status, 400);
+
+  let blocked;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    blocked = await post(rig.fetch, rig.url, '/api/auth/login', {
+      accountNumber: '1234567890',
+      password: 'wrong-password'
+    });
+  }
+  assert.equal(blocked.status, 429);
+  assert.ok(Number(blocked.headers.get('retry-after')) > 0);
 });
 
 test('send route fails when TextBee rejects the SMS', async (t) => {
@@ -312,6 +377,7 @@ test('CORS allows only Banco KIKE hosting and local development origins', async 
     headers: { Origin: 'https://bancokike-45795.web.app' }
   });
   assert.equal(allowed.headers.get('access-control-allow-origin'), 'https://bancokike-45795.web.app');
+  assert.equal(allowed.headers.get('access-control-allow-credentials'), 'true');
 
   const local = await rig.fetch(`${rig.url}/unknown`, {
     headers: { Origin: 'http://localhost:4200' }
@@ -322,6 +388,18 @@ test('CORS allows only Banco KIKE hosting and local development origins', async 
     headers: { Origin: 'https://untrusted.example' }
   });
   assert.equal(rejected.headers.get('access-control-allow-origin'), null);
+});
+
+test('cookie-authenticated mutations reject requests without an allowed Origin', async (t) => {
+  const rig = await createRig(t);
+  const response = await rig.fetch(`${rig.url}/api/auth/refresh`, {
+    method: 'POST',
+    headers: {
+      Cookie: 'banco_refresh=invalid-token',
+      Origin: 'https://attacker.example'
+    }
+  });
+  assert.equal(response.status, 403);
 });
 
 test('send route rejects malformed and non-Mexican phone numbers', async (t) => {
@@ -369,7 +447,9 @@ test('registration requires a verified phone and succeeds after SMS verification
   const body = await registered.json();
   assert.equal(registered.status, 200);
   assert.equal(body.message, 'Usuario registrado');
-  assert.equal(typeof body.token, 'string');
+  assert.equal('token' in body, false);
+  assert.match(registered.headers.get('set-cookie') || '', /banco_access=.*HttpOnly/);
+  assert.match(registered.headers.get('set-cookie') || '', /banco_refresh=.*HttpOnly/);
   assert.equal(body.user.email, registration.email);
 });
 

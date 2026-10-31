@@ -471,6 +471,7 @@ test('POST /api/depositos/contador/confirmar acredita y registra el movimiento u
   let state = 'pendiente';
   let creditCount = 0;
   let movementCount = 0;
+  let auditCount = 0;
   const deposit = () => ({
     operacion_id: operacionId,
     cuenta_id: 11,
@@ -496,6 +497,10 @@ test('POST /api/depositos/contador/confirmar acredita y registra el movimiento u
       }
       if (query.includes('INSERT INTO movimientos')) {
         movementCount += 1;
+        return { rows: [] };
+      }
+      if (query.includes('INSERT INTO auth_audit_log')) {
+        auditCount += 1;
         return { rows: [] };
       }
       if (query.includes("SET estado = 'confirmado'")) {
@@ -529,6 +534,7 @@ test('POST /api/depositos/contador/confirmar acredita y registra el movimiento u
     }
     assert.equal(creditCount, 1);
     assert.equal(movementCount, 1);
+    assert.equal(auditCount, 1);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     pool.connect = originalConnect;

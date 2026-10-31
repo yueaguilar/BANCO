@@ -20,6 +20,7 @@ interface SessionResponse {
 }
 
 import { API_URL } from '../../api-config';
+import { apiFetch } from '../../services/api-fetch';
 import {
   esIngreso,
   obtenerMovimientosBancarios,
@@ -34,39 +35,19 @@ export async function iniciarApp(): Promise<void> {
   }).format(Number(value || 0));
 
   const getSession = async (): Promise<Session> => {
-    let user: User | null = null;
-    let bankData: BankData | null = null;
-    const token = localStorage.getItem('sessionToken') || '';
-
     try {
-      user = JSON.parse(localStorage.getItem('user') as string);
-      bankData = JSON.parse(localStorage.getItem('bankData') as string);
-    } catch (error) {
-      user = null;
-      bankData = null;
-    }
-
-    if (!token && !user?.email) {
-      return { user: null, bankData: null };
-    }
-
-    if (token) {
-      try {
-        const response = await fetch(`${API_URL}/api/session`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const data: SessionResponse = await response.json();
-        if (response.ok && data.success) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-          localStorage.setItem('bankData', JSON.stringify(data.bankData));
-          return { user: data.user, bankData: data.bankData };
-        }
-      } catch (error) {
-        console.warn('No se pudo cargar la sesión desde la base de datos', error);
+      const response = await apiFetch(`${API_URL}/api/auth/me`);
+      const data: SessionResponse = await response.json();
+      if (response.ok && data.success) {
+        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('bankData', JSON.stringify(data.bankData));
+        return { user: data.user, bankData: data.bankData };
       }
+    } catch (error) {
+      console.warn('No se pudo cargar la sesión desde la base de datos', error);
     }
 
-    return { user, bankData };
+    return { user: null, bankData: null };
   };
 
   const session = await getSession();
@@ -102,8 +83,7 @@ export async function iniciarApp(): Promise<void> {
     }
 
     try {
-      const token = localStorage.getItem('sessionToken') || '';
-      const movements = await obtenerMovimientosBancarios(token);
+      const movements = await obtenerMovimientosBancarios();
       const income = movements
         .filter(esIngreso)
         .reduce((total, movement) => total + Number(movement.monto), 0);

@@ -10,11 +10,11 @@ interface ApiResponse {
 }
 
 interface AuthResponse extends ApiResponse {
-  token?: string;
   user?: Record<string, unknown>;
   bankData?: Record<string, unknown>;
 }
 import { API_URL } from '../../api-config';
+import { apiFetch } from '../../services/api-fetch';
 
 export function iniciarVerificacion(): void {
   const verificationPhoneEl = document.getElementById('verification-phone');
@@ -46,7 +46,7 @@ export function iniciarVerificacion(): void {
     }
 
     try {
-      const response = await fetch(`${API_URL}/api/verification/send`, {
+      const response = await apiFetch(`${API_URL}/api/verification/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone })
@@ -85,7 +85,7 @@ export function iniciarVerificacion(): void {
       }
 
       try {
-        const response = await fetch(`${API_URL}/api/verification/verify`, {
+        const response = await apiFetch(`${API_URL}/api/verification/verify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone, code })
@@ -101,7 +101,7 @@ export function iniciarVerificacion(): void {
           throw new Error('No hay datos de registro pendientes.');
         }
 
-        const authResponse = await fetch(`${API_URL}/api/auth`, {
+        const authResponse = await apiFetch(`${API_URL}/api/auth`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -116,10 +116,7 @@ export function iniciarVerificacion(): void {
           throw new Error(authData.message || 'No se pudo completar la autenticación.');
         }
 
-        if (!authData.token) {
-          throw new Error('El servidor no devolvió una sesión segura.');
-        }
-        localStorage.setItem('sessionToken', authData.token);
+        localStorage.removeItem('sessionToken');
         localStorage.setItem('user', JSON.stringify(authData.user));
         if (authData.bankData) localStorage.setItem('bankData', JSON.stringify(authData.bankData));
         localStorage.removeItem('pendingAuth');

@@ -4,13 +4,13 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { API_URL } from '../../api-config';
 import { ChangeDetectorRef, Component } from '@angular/core';
+import { AuthService } from '../../services/auth.service';
 
 type Step = 'form' | 'code';
 
 interface AuthResponse {
   success: boolean;
   message?: string;
-  token?: string;
   user?: Record<string, unknown>;
   bankData?: Record<string, unknown>;
 }
@@ -29,8 +29,10 @@ export class LoginBanco {
   mostrarPassword = false;
   phoneError = '';
   phoneTouched = false;
+  accountLoginMode = false;
 
   email = '';
+  accountNumber = '';
   fullname = '';
   birthdate = '';
   phone = '';
@@ -41,6 +43,7 @@ export class LoginBanco {
 
   constructor(
     private http: HttpClient,
+    private authService: AuthService,
     private router: Router,
     private cdr: ChangeDetectorRef
   ) {}
@@ -54,6 +57,36 @@ export class LoginBanco {
     if (this.phoneTouched) {
       this.validarTelefono();
     }
+  }
+
+  iniciarSesionConCuenta(): void {
+    this.errorMessage = '';
+    const accountNumber = this.accountNumber.trim();
+    if (!/^\d{10}$/.test(accountNumber) || !this.password) {
+      this.errorMessage = 'Ingresa un número de cuenta de 10 dígitos y tu contraseña.';
+      return;
+    }
+
+    this.loading = true;
+    this.authService.login(accountNumber, this.password).subscribe({
+      next: (response) => {
+        this.loading = false;
+        if (!response.success) {
+          this.errorMessage = response.message || 'No se pudo iniciar sesión.';
+          return;
+        }
+        localStorage.removeItem('sessionToken');
+        if (response.user) localStorage.setItem('user', JSON.stringify(response.user));
+        if (response.bankData) localStorage.setItem('bankData', JSON.stringify(response.bankData));
+        else localStorage.removeItem('bankData');
+        this.router.navigate(['/app']);
+      },
+      error: (error) => {
+        this.loading = false;
+        this.errorMessage = error?.error?.message || 'No se pudo iniciar sesión.';
+        this.cdr.markForCheck();
+      }
+    });
   }
 
   validarTelefono(): boolean {
@@ -155,11 +188,7 @@ error: (err) => {
             this.loading = false;
 
             if (authRes.success) {
-              if (!authRes.token) {
-                this.errorMessage = 'El servidor no devolvió una sesión segura.';
-                return;
-              }
-              localStorage.setItem('sessionToken', authRes.token);
+              localStorage.removeItem('sessionToken');
               // Guardamos la sesión para que la pantalla /app la pueda leer
               if (authRes.user) {
                 localStorage.setItem('user', JSON.stringify(authRes.user));
