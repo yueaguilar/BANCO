@@ -371,13 +371,47 @@ test('send route limits SMS requests by IP across distinct phone numbers', async
   assert.equal(smsRequests, 5);
 });
 
-test('CORS allows only Banco KIKE hosting and local development origins', async (t) => {
+test('CORS allows the deployed portal, credentials, and preflight while rejecting other origins', async (t) => {
   const rig = await createRig(t);
   const allowed = await rig.fetch(`${rig.url}/unknown`, {
-    headers: { Origin: 'https://bancokike-45795.web.app' }
+    headers: { Origin: 'https://apibanco-e3112.web.app' }
   });
-  assert.equal(allowed.headers.get('access-control-allow-origin'), 'https://bancokike-45795.web.app');
+  assert.equal(allowed.headers.get('access-control-allow-origin'), 'https://apibanco-e3112.web.app');
   assert.equal(allowed.headers.get('access-control-allow-credentials'), 'true');
+
+  const preflight = await rig.fetch(`${rig.url}/api/auth/me`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'https://apibanco-e3112.web.app',
+      'Access-Control-Request-Method': 'GET',
+      'Access-Control-Request-Headers': 'authorization,content-type'
+    }
+  });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://apibanco-e3112.web.app');
+  assert.equal(preflight.headers.get('access-control-allow-credentials'), 'true');
+  assert.equal(preflight.headers.get('access-control-allow-methods'), 'GET,POST,DELETE,OPTIONS');
+  assert.match(preflight.headers.get('access-control-allow-headers') || '', /authorization/i);
+  assert.match(preflight.headers.get('access-control-allow-headers') || '', /content-type/i);
+
+  const liveHealth = await rig.fetch(`${rig.url}/health/live`, {
+    headers: { Origin: 'https://apibanco-e3112.web.app' }
+  });
+  assert.equal(liveHealth.status, 200);
+  assert.equal(liveHealth.headers.get('access-control-allow-origin'), 'https://apibanco-e3112.web.app');
+  assert.deepEqual(await liveHealth.json(), { success: true, status: 'ok' });
+
+  const serverError = await rig.fetch(`${rig.url}/api/auth/login`, {
+    method: 'POST',
+    headers: {
+      Origin: 'https://apibanco-e3112.web.app',
+      'Content-Type': 'application/json'
+    },
+    body: '{invalid json'
+  });
+  assert.equal(serverError.status, 400);
+  assert.equal(serverError.headers.get('access-control-allow-origin'), 'https://apibanco-e3112.web.app');
+  assert.equal(serverError.headers.get('access-control-allow-credentials'), 'true');
 
   const local = await rig.fetch(`${rig.url}/unknown`, {
     headers: { Origin: 'http://localhost:4200' }
@@ -388,6 +422,11 @@ test('CORS allows only Banco KIKE hosting and local development origins', async 
     headers: { Origin: 'https://untrusted.example' }
   });
   assert.equal(rejected.headers.get('access-control-allow-origin'), null);
+
+  const previousPortal = await rig.fetch(`${rig.url}/unknown`, {
+    headers: { Origin: 'https://bancokike-45795.web.app' }
+  });
+  assert.equal(previousPortal.headers.get('access-control-allow-origin'), null);
 });
 
 test('cookie-authenticated mutations reject requests without an allowed Origin', async (t) => {
