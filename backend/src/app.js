@@ -50,12 +50,13 @@ const SMS_IP_MAX_REQUESTS = 5;
 const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
 
 const allowedOrigins = new Set([
-    'https://apibanco-e3112.web.app',
+    'https://bancokike-45795.web.app',
+    'https://bancokike-45795.firebaseapp.com',
     ...(!isProduction ? [
         'http://localhost:4200',
         'http://127.0.0.1:4200'
     ] : []),
-    ...String(process.env.PORTAL_ORIGIN || '')
+    ...String(process.env.FRONTEND_URL || '')
         .split(',')
         .map((origin) => origin.trim().replace(/\/$/, ''))
         .filter(Boolean),
@@ -67,14 +68,6 @@ const allowedOrigins = new Set([
 
 const isBehindRenderProxy = isProduction;
 app.set('trust proxy', isBehindRenderProxy ? 1 : false);
-app.use(cors({
-    origin(origin, callback) {
-        callback(null, !origin || allowedOrigins.has(origin.replace(/\/$/, '')));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
 app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -88,6 +81,12 @@ app.use((req, res, next) => {
     }
     next();
 });
+app.use(cors({
+    origin(origin, callback) {
+        callback(null, !origin || allowedOrigins.has(origin.replace(/\/$/, '')));
+    },
+    credentials: true
+}));
 app.use(express.json({ limit: '16kb' }));
 app.use((req, res, next) => {
     const stateChanging = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
@@ -158,10 +157,6 @@ app.get('/health', async (_req, res) => {
         console.error('Health check database query failed.');
         return res.status(503).json({ success: false, status: 'unavailable' });
     }
-});
-
-app.get('/health/live', (_req, res) => {
-    return res.json({ success: true, status: 'ok' });
 });
 
 async function generateSecureNip() {
@@ -1265,7 +1260,7 @@ if (require.main === module) {
     ];
     if (isProduction) {
         requiredConfig.push(['DATABASE_URL', process.env.DATABASE_URL, 1]);
-        requiredConfig.push(['PORTAL_ORIGIN', process.env.PORTAL_ORIGIN, 1]);
+        requiredConfig.push(['FRONTEND_URL', process.env.FRONTEND_URL, 1]);
     }
     const missingConfig = requiredConfig
         .filter(([name, value, minLength]) => !value || String(value).trim().length < minLength)
