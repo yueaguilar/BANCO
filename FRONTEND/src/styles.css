@@ -327,6 +327,129 @@ label.small {
   color: var(--danger);
 }
 
+#transactionList .transaction-item,
+#modalList.transaction-list .transaction-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  margin: 0 0 12px;
+  padding: 15px;
+  border: 1px solid rgba(201, 246, 255, 0.15);
+  border-radius: 17px;
+  background:
+    radial-gradient(ellipse at 4% 0%, rgba(144, 224, 239, 0.09), transparent 48%),
+    linear-gradient(130deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025));
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  color: var(--text);
+}
+
+#transactionList .transaction-item:last-child,
+#modalList.transaction-list .transaction-item:last-child {
+  margin-bottom: 0;
+}
+
+#transactionList .transaction-item.empty-state,
+#modalList.transaction-list .transaction-item.empty-state {
+  justify-content: flex-start;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+#transactionList .transaction-left,
+#modalList.transaction-list .transaction-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+#transactionList .transaction-icon,
+#modalList.transaction-list .transaction-icon {
+  display: flex;
+  flex: 0 0 42px;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: rgba(144, 224, 239, 0.18);
+  color: var(--primary-strong);
+  font-weight: 800;
+}
+
+#transactionList .transaction-icon.income,
+#modalList.transaction-list .transaction-icon.income {
+  background: rgba(142, 240, 176, 0.15);
+  color: var(--success);
+}
+
+#transactionList .transaction-icon.expense,
+#modalList.transaction-list .transaction-icon.expense {
+  background: rgba(255, 140, 168, 0.12);
+  color: var(--danger);
+}
+
+#transactionList .transaction-left > div,
+#modalList.transaction-list .transaction-left > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+}
+
+#transactionList .transaction-left strong,
+#modalList.transaction-list .transaction-left strong {
+  color: var(--text);
+  line-height: 1.35;
+}
+
+#transactionList .transaction-left .movement-kind,
+#modalList.transaction-list .transaction-left .movement-kind {
+  margin: 0;
+  padding: 4px 9px;
+}
+
+#transactionList .transaction-right,
+#modalList.transaction-list .transaction-right {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  color: var(--muted);
+  text-align: right;
+}
+
+#transactionList .transaction-right .amount,
+#modalList.transaction-list .transaction-right .amount {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid rgba(201, 246, 255, 0.13);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#transactionList .transaction-right .amount.positive,
+#modalList.transaction-list .transaction-right .amount.positive {
+  border-color: rgba(142, 240, 176, 0.2);
+  background: rgba(142, 240, 176, 0.07);
+  color: var(--success);
+}
+
+#transactionList .transaction-right .amount.negative,
+#modalList.transaction-list .transaction-right .amount.negative {
+  border-color: rgba(255, 140, 168, 0.18);
+  background: rgba(255, 140, 168, 0.06);
+  color: var(--danger);
+}
+
 #movementList .movement-item {
   position: relative;
   display: flex;
@@ -456,6 +579,21 @@ label.small {
 }
 
 @media (max-width: 600px) {
+  #transactionList .transaction-item:not(.empty-state),
+  #modalList.transaction-list .transaction-item:not(.empty-state) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  #transactionList .transaction-right,
+  #modalList.transaction-list .transaction-right {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    text-align: left;
+  }
+
   #movementList .movement-item:not(.empty-state) {
     align-items: flex-start;
     flex-direction: column;

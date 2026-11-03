@@ -17,6 +17,11 @@
 
 * { box-sizing: border-box; }
 
+:host {
+  display: block;
+  min-height: 100vh;
+}
+
 html, body {
   height: 100%;
   margin: 0;
@@ -60,6 +65,11 @@ a {
   margin: 0 auto;
 }
 
+.topbar .logo {
+  width: 58px;
+  height: 46px;
+}
+
 .brand {
   margin: 0;
   font-size: clamp(1.2rem, 2vw, 1.6rem);
@@ -81,9 +91,8 @@ a {
 }
 
 .page-shell {
-  max-width: 1100px;
-  margin: 28px auto 120px;
-  padding: 0 18px;
+  width: min(100% - 36px, 1100px);
+  margin: 30px auto 120px;
 }
 
 .glass-card {
@@ -106,7 +115,7 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 20px 22px;
+  padding: 22px 24px;
   margin-bottom: 18px;
 }
 
@@ -140,6 +149,7 @@ a {
 .profile-header h2 {
   margin: 0;
   font-size: clamp(1.4rem, 2vw, 1.8rem);
+  overflow-wrap: anywhere;
 }
 
 .account-badge {
@@ -153,7 +163,7 @@ a {
 }
 
 .main-card {
-  padding: 22px;
+  padding: 24px;
   margin-bottom: 18px;
 }
 
@@ -176,6 +186,8 @@ a {
   margin: 0;
   font-size: clamp(2rem, 3vw, 3rem);
   letter-spacing: -0.04em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
 .account-number-row {
@@ -184,17 +196,18 @@ a {
   justify-content: space-between;
   gap: 12px;
   background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px;
-  padding: 12px 14px;
+  border: 1px solid rgba(201,246,255,0.12);
+  border-radius: 14px;
+  padding: 12px 16px;
   color: var(--muted);
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .action-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
+  margin-top: 20px;
 }
 
 .primary-btn,
@@ -207,8 +220,13 @@ a {
 .primary-btn,
 .ghost-btn,
 .action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
   border-radius: 14px;
   padding: 12px 16px;
+  font: inherit;
   font-weight: 700;
 }
 
@@ -618,6 +636,11 @@ a {
 @media (max-width: 480px) {
   .page-shell {
     padding: 0 12px;
+  }
+
+  .topbar .logo {
+    width: 48px;
+    height: 42px;
   }
 
   .profile-header,
