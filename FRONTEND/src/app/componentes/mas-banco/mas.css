@@ -60,6 +60,23 @@ a {
   margin: 0 auto;
 }
 
+.topbar-inner > a:first-child {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.topbar .logo {
+  display: block;
+  width: 58px;
+  height: 46px;
+  padding: 4px;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 13px;
+  background: rgba(255,255,255,0.92);
+  object-fit: contain;
+}
+
 .brand {
   margin: 0;
   font-size: clamp(1.2rem, 2vw, 1.6rem);
@@ -72,6 +89,7 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 42px;
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.24);
   border-radius: 999px;
@@ -441,6 +459,19 @@ a {
 @media (max-width: 480px) {
   .page-shell {
     padding: 0 12px;
+  }
+
+  .topbar {
+    padding: 10px 12px;
+  }
+
+  .topbar .logo {
+    width: 48px;
+    height: 42px;
+  }
+
+  .topbar-inner {
+    gap: 10px;
   }
 
   .info-hero,

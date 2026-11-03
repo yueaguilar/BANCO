@@ -327,6 +327,149 @@ label.small {
   color: var(--danger);
 }
 
+#movementList .movement-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 14px;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(201, 246, 255, 0.16);
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse at 4% 0%, rgba(144, 224, 239, 0.1), transparent 48%),
+    linear-gradient(130deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.025));
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.17),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#movementList .movement-item:last-child {
+  margin-bottom: 0;
+}
+
+#movementList .movement-item:not(.empty-state):hover {
+  transform: translateY(-2px);
+  border-color: rgba(201, 246, 255, 0.3);
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.22),
+    0 0 16px rgba(144, 224, 239, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+#movementList .movement-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+#movementList .movement-left > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+#movementList .movement-left strong {
+  display: block;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+#movementList .movement-icon {
+  display: flex;
+  flex: 0 0 42px;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: rgba(144, 224, 239, 0.18);
+  color: var(--primary-strong);
+  font-weight: 800;
+}
+
+#movementList .movement-icon.income {
+  background: rgba(142, 240, 176, 0.15);
+  color: var(--success);
+}
+
+#movementList .movement-icon.transfer {
+  background: rgba(144, 224, 239, 0.18);
+  color: var(--primary-strong);
+}
+
+#movementList .movement-kind {
+  margin: 0;
+  padding: 4px 9px;
+}
+
+#movementList .movement-right {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  text-align: right;
+}
+
+#movementList .movement-right small {
+  display: block;
+  margin: 0;
+  color: var(--muted);
+}
+
+#movementList .movement-right .amount {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid rgba(201, 246, 255, 0.13);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#movementList .movement-right .amount.positive {
+  border-color: rgba(142, 240, 176, 0.2);
+  background: rgba(142, 240, 176, 0.07);
+  color: var(--success);
+}
+
+#movementList .movement-right .amount.negative {
+  border-color: rgba(255, 140, 168, 0.18);
+  background: rgba(255, 140, 168, 0.06);
+  color: var(--danger);
+}
+
+#movementList .movement-item.empty-state {
+  color: var(--muted);
+}
+
+@media (max-width: 600px) {
+  #movementList .movement-item:not(.empty-state) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  #movementList .movement-right {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    text-align: left;
+  }
+}
+
 .primary,
 .outline {
   min-height: 46px;
