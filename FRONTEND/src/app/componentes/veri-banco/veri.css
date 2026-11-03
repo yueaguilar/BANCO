@@ -2,15 +2,10 @@
     box-sizing: border-box;
 }
 
-body {
-    margin: 0;
+:host {
+    display: grid;
     min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: radial-gradient(circle at top, #1f3f5f 0%, #0d1b2a 42%, #091421 100%);
-    font-family: Arial, sans-serif;
-    color: #edf6ff;
+    place-items: center;
     padding: 24px;
 }
 

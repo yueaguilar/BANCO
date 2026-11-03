@@ -353,7 +353,7 @@ a {
 .bottom-nav {
   position: fixed;
   left: 50%;
-  bottom: 16px;
+  bottom: max(10px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   width: min(96vw, 520px);
   display: grid;
@@ -390,12 +390,17 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 0;
+  min-height: 44px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 14px;
   color: var(--muted);
-  padding: 10px 8px;
+  padding: 8px 4px;
   font-weight: 600;
+  font-size: clamp(0.62rem, 2.7vw, 0.86rem);
+  line-height: 1.15;
+  text-align: center;
   transition: color 0.25s ease, transform 0.2s ease;
 }
 
