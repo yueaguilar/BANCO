@@ -16,7 +16,7 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
   });
   if (!isApiRequest) return next(credentialedRequest);
   const isPublicAuthEndpoint = request.url === `${API_URL}/api/auth`
-    || /^\/api\/auth\/(login|refresh|logout)$/.test(new URL(request.url, API_URL).pathname)
+    || /^\/api\/auth\/(login(?:\/verify)?|refresh|logout)$/.test(new URL(request.url, API_URL).pathname)
     || request.url.includes('/api/verification/');
 
   return next(credentialedRequest).pipe(

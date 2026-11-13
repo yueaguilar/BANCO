@@ -90,7 +90,9 @@ h1 {
   box-shadow: 0 0 0 3px rgba(144, 224, 239, 0.18);
 }
 
-.liquid-glass-btn {
+.liquid-glass-btn,
+.secondary-btn,
+.text-btn {
   display: inline-flex;
   min-height: 48px;
   align-items: center;
@@ -107,7 +109,32 @@ h1 {
   cursor: pointer;
 }
 
-.liquid-glass-btn:disabled {
+.secondary-btn {
+  margin-top: 0;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+
+.text-btn {
+  min-height: 40px;
+  margin-top: 0;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: #90e0ef;
+  box-shadow: none;
+}
+
+.verification-code {
+  font-size: 1.2rem;
+  letter-spacing: 0.2rem;
+  text-align: center;
+}
+
+.liquid-glass-btn:disabled,
+.secondary-btn:disabled,
+.text-btn:disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }
@@ -115,6 +142,12 @@ h1 {
 .error {
   margin: 0;
   color: #ff9b9b;
+  font-size: 0.9rem;
+}
+
+.status {
+  margin: 0;
+  color: #8ef0b0;
   font-size: 0.9rem;
 }
 

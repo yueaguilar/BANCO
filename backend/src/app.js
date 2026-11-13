@@ -131,6 +131,85 @@ function loginAttemptKey(req, accountNumber) {
         .digest('hex');
 }
 
+async function sendVerificationCode(req, phone) {
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) {
+        return { status: 400, message: 'Ingresa un número mexicano válido de 10 dígitos.' };
+    }
+
+    const ipAddress = req.ip;
+    if (!ipAddress || ipAddress.length > 45) {
+        return { status: 400, message: 'No se pudo identificar el origen de la solicitud.' };
+    }
+
+    try {
+        const hmacSecret = process.env.SMS_CODE_HMAC_SECRET;
+        if (typeof hmacSecret !== 'string' || Buffer.byteLength(hmacSecret, 'utf8') < 32) {
+            throw new Error('SMS_CODE_HMAC_SECRET is unavailable.');
+        }
+        const ipKey = createHmac('sha256', hmacSecret).update(ipAddress).digest('hex');
+        const rateLimit = await pool.query(
+            `INSERT INTO sms_ip_rate_limits (ip_key, window_started_at, request_count)
+             VALUES ($1, NOW(), 1)
+             ON CONFLICT (ip_key) DO UPDATE
+             SET window_started_at = CASE
+                     WHEN sms_ip_rate_limits.window_started_at <= NOW() - INTERVAL '15 minutes' THEN NOW()
+                     ELSE sms_ip_rate_limits.window_started_at
+                 END,
+                 request_count = CASE
+                     WHEN sms_ip_rate_limits.window_started_at <= NOW() - INTERVAL '15 minutes' THEN 1
+                     ELSE sms_ip_rate_limits.request_count + 1
+                 END
+             RETURNING request_count, window_started_at`,
+            [ipKey]
+        );
+        const attempts = Number(rateLimit.rows[0]?.request_count);
+        if (!Number.isSafeInteger(attempts)) {
+            throw new Error('No se pudo evaluar el límite de SMS.');
+        }
+        if (attempts > SMS_IP_MAX_REQUESTS) {
+            const windowStartedAt = new Date(rateLimit.rows[0].window_started_at).getTime();
+            const retryAfterSeconds = Math.max(
+                1,
+                Math.ceil((windowStartedAt + SMS_IP_WINDOW_MS - Date.now()) / 1000)
+            );
+            return {
+                status: 429,
+                message: 'Se alcanzó el límite de solicitudes de SMS desde esta conexión. Inténtalo más tarde.',
+                retryAfter: retryAfterSeconds
+            };
+        }
+    } catch (error) {
+        console.error('No se pudo aplicar el límite de solicitudes SMS.', error?.code || error?.name || 'unknown');
+        return { status: 503, message: 'El envío de SMS no está disponible temporalmente.' };
+    }
+
+    const code = generateVerificationCode();
+    try {
+        await storeVerificationCode(normalizedPhone, code);
+    } catch (error) {
+        if (error instanceof VerificationRateLimitError) {
+            return { status: error.statusCode, message: error.message };
+        }
+        console.error('Error al guardar el desafío de verificación SMS.');
+        return { status: 500, message: 'No se pudo preparar la verificación del teléfono.' };
+    }
+
+    try {
+        await sendSms(`+52${normalizedPhone}`, `Tu código de verificación de Banco KIKE es ${code}. Expira en 5 minutos.`);
+    } catch {
+        try {
+            await discardVerificationCode(normalizedPhone, code);
+        } catch {
+            console.error('Error al invalidar un desafío SMS cuyo envío fue rechazado.');
+        }
+        console.error('Error al enviar el SMS mediante TextBee.');
+        return { status: 502, message: 'No se pudo enviar el SMS. Inténtalo de nuevo más tarde.' };
+    }
+
+    return { status: 200, message: 'Código SMS enviado al teléfono.' };
+}
+
 async function registerFailedLogin(key) {
     const { rows } = await pool.query(
         `INSERT INTO auth_login_attempts (login_key, window_started_at, attempts)
@@ -541,7 +620,7 @@ app.post('/api/auth/login', async (req, res) => {
     const attemptKey = loginAttemptKey(req, accountNumber);
     try {
         const { rows } = await pool.query(
-            `SELECT u.id, u.fullname, u.email, u.password
+            `SELECT u.id, u.fullname, u.email, u.password, u.phone
              FROM users u
              INNER JOIN cuentas c ON c.usuario_id = u.id
              WHERE c.numero_cuenta = $1
@@ -566,9 +645,89 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         await pool.query('DELETE FROM auth_login_attempts WHERE login_key = $1', [attemptKey]);
+        if (!accountUser.phone) {
+            return res.status(403).json({
+                success: false,
+                message: 'La cuenta no tiene un teléfono registrado para la verificación SMS.'
+            });
+        }
+        const verification = await sendVerificationCode(req, accountUser.phone);
+        if (verification.retryAfter) res.set('Retry-After', String(verification.retryAfter));
+        if (verification.status !== 200) {
+            return res.status(verification.status).json({ success: false, message: verification.message });
+        }
+        return res.json({
+            success: true,
+            requiresVerification: true,
+            phoneHint: `••••${String(accountUser.phone).slice(-4)}`,
+            message: 'Código de verificación enviado al teléfono registrado.'
+        });
+    } catch (error) {
+        console.error('Account login failed:', error?.code || error?.name || 'unknown');
+        return res.status(500).json({ success: false, message: 'No se pudo iniciar sesión.' });
+    }
+});
+
+app.post('/api/auth/login/verify', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const accountNumber = String(
+        req.body?.accountNumber || req.body?.numeroCuenta || req.body?.numero_cuenta || ''
+    ).trim();
+    const { password, code } = req.body || {};
+    if (!/^\d{10}$/.test(accountNumber)
+        || typeof password !== 'string' || password.length === 0
+        || typeof code !== 'string' || !/^\d{6}$/.test(code)) {
+        return res.status(400).json({
+            success: false,
+            message: 'Ingresa el número de cuenta, la contraseña y el código SMS de 6 dígitos.'
+        });
+    }
+    if (!getTokenConfiguration()) {
+        return res.status(503).json({ success: false, message: 'La autenticación no está configurada correctamente.' });
+    }
+
+    const attemptKey = loginAttemptKey(req, accountNumber);
+    try {
+        const { rows } = await pool.query(
+            `SELECT u.id, u.fullname, u.email, u.password, u.phone
+             FROM users u
+             INNER JOIN cuentas c ON c.usuario_id = u.id
+             WHERE c.numero_cuenta = $1
+             LIMIT 1`,
+            [accountNumber]
+        );
+        const accountUser = rows[0];
+        const passwordMatches = await bcrypt.compare(password, accountUser?.password || DUMMY_PASSWORD_HASH);
+        if (!accountUser || !passwordMatches) {
+            const attempts = await registerFailedLogin(attemptKey);
+            if (attempts >= 5) {
+                res.set('Retry-After', '900');
+                return res.status(429).json({
+                    success: false,
+                    message: 'Demasiados intentos de inicio de sesión. Inténtalo de nuevo en 15 minutos.'
+                });
+            }
+            return res.status(401).json({ success: false, message: 'Número de cuenta o contraseña incorrectos.' });
+        }
+        if (!accountUser.phone) {
+            return res.status(403).json({
+                success: false,
+                message: 'La cuenta no tiene un teléfono registrado para la verificación SMS.'
+            });
+        }
+
+        const normalizedPhone = normalizePhone(accountUser.phone);
+        const codeIsValid = await consumeVerificationCode(normalizedPhone, code);
+        const phoneIsVerified = codeIsValid
+            && await consumePhoneVerification(normalizedPhone, AUTH_VERIFICATION_PURPOSE);
+        if (!phoneIsVerified) {
+            return res.status(401).json({ success: false, message: 'El código SMS es inválido o expiró.' });
+        }
+
+        await pool.query('DELETE FROM auth_login_attempts WHERE login_key = $1', [attemptKey]);
         const bankData = await getBankDataForUser(accountUser.id);
         const session = await createSession(pool, accountUser.id, req);
-        await writeAuthAudit(accountUser.id, 'login', session.sessionId, req);
+        await writeAuthAudit(accountUser.id, 'login_sms', session.sessionId, req);
         setSessionCookies(res, session, session.expiresAt);
         return res.json({
             success: true,
@@ -577,8 +736,8 @@ app.post('/api/auth/login', async (req, res) => {
             bankData
         });
     } catch (error) {
-        console.error('Account login failed:', error?.code || error?.name || 'unknown');
-        return res.status(500).json({ success: false, message: 'No se pudo iniciar sesión.' });
+        console.error('Account login verification failed:', error?.code || error?.name || 'unknown');
+        return res.status(500).json({ success: false, message: 'No se pudo verificar el inicio de sesión.' });
     }
 });
 
@@ -1022,84 +1181,11 @@ app.post('/api/account/temporary-nip/consume', authenticateUser, async (req, res
 
 app.post('/api/verification/send', async (req, res) => {
     const { phone } = req.body || {};
-    const normalizedPhone = normalizePhone(phone);
-
-    const ipAddress = req.ip;
-    if (!ipAddress || ipAddress.length > 45) {
-        return res.status(400).json({ success: false, message: 'No se pudo identificar el origen de la solicitud.' });
-    }
-    try {
-        const hmacSecret = process.env.SMS_CODE_HMAC_SECRET;
-        if (typeof hmacSecret !== 'string' || Buffer.byteLength(hmacSecret, 'utf8') < 32) {
-            throw new Error('SMS_CODE_HMAC_SECRET is unavailable.');
-        }
-        const ipKey = createHmac('sha256', hmacSecret).update(ipAddress).digest('hex');
-        const rateLimit = await pool.query(
-            `INSERT INTO sms_ip_rate_limits (ip_key, window_started_at, request_count)
-             VALUES ($1, NOW(), 1)
-             ON CONFLICT (ip_key) DO UPDATE
-             SET window_started_at = CASE
-                     WHEN sms_ip_rate_limits.window_started_at <= NOW() - INTERVAL '15 minutes' THEN NOW()
-                     ELSE sms_ip_rate_limits.window_started_at
-                 END,
-                 request_count = CASE
-                     WHEN sms_ip_rate_limits.window_started_at <= NOW() - INTERVAL '15 minutes' THEN 1
-                     ELSE sms_ip_rate_limits.request_count + 1
-                 END
-             RETURNING request_count, window_started_at`,
-            [ipKey]
-        );
-        const attempts = Number(rateLimit.rows[0]?.request_count);
-        if (!Number.isSafeInteger(attempts)) {
-            throw new Error('No se pudo evaluar el límite de SMS.');
-        }
-        if (attempts > SMS_IP_MAX_REQUESTS) {
-            const windowStartedAt = new Date(rateLimit.rows[0].window_started_at).getTime();
-            const retryAfterSeconds = Math.max(
-                1,
-                Math.ceil((windowStartedAt + SMS_IP_WINDOW_MS - Date.now()) / 1000)
-            );
-            res.set('Retry-After', String(retryAfterSeconds));
-            return res.status(429).json({
-                success: false,
-                message: 'Se alcanzó el límite de solicitudes de SMS desde esta conexión. Inténtalo más tarde.'
-            });
-        }
-    } catch (error) {
-        console.error('No se pudo aplicar el límite de solicitudes SMS.', error?.code || error?.name || 'unknown');
-        return res.status(503).json({ success: false, message: 'El envío de SMS no está disponible temporalmente.' });
-    }
-
-    if (!normalizedPhone) {
-        return res.status(400).json({ success: false, message: 'Ingresa un número mexicano válido de 10 dígitos.' });
-    }
-
-    const code = generateVerificationCode();
-    try {
-        await storeVerificationCode(normalizedPhone, code);
-    } catch (error) {
-        if (error instanceof VerificationRateLimitError) {
-            return res.status(error.statusCode).json({ success: false, message: error.message });
-        }
-        console.error('Error al guardar el desafío de verificación SMS.');
-        return res.status(500).json({ success: false, message: 'No se pudo preparar la verificación del teléfono.' });
-    }
-
-    try {
-        await sendSms(`+52${normalizedPhone}`, `Tu código de verificación de Banco KIKE es ${code}. Expira en 5 minutos.`);
-    } catch {
-        try {
-            await discardVerificationCode(normalizedPhone, code);
-        } catch {
-            console.error('Error al invalidar un desafío SMS cuyo envío fue rechazado.');
-        }
-        console.error('Error al enviar el SMS mediante TextBee.');
-        return res.status(502).json({ success: false, message: 'No se pudo enviar el SMS. Inténtalo de nuevo más tarde.' });
-    }
-
-    return res.json({
-        success: true,
-        message: 'Código SMS enviado al teléfono.'
+    const result = await sendVerificationCode(req, phone);
+    if (result.retryAfter) res.set('Retry-After', String(result.retryAfter));
+    return res.status(result.status).json({
+        success: result.status === 200,
+        message: result.message
     });
 });
 

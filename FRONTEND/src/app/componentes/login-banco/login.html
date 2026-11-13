@@ -3,27 +3,52 @@
     <header class="auth-header">
       <img src="/logo2.png" alt="Logo de Banco LCDK" class="logo">
       <p class="eyebrow">Bienvenido de nuevo</p>
-      <h1>Iniciar sesión</h1>
-      <p class="intro">Accede a tu cuenta con tu número de cuenta y contraseña.</p>
+      <h1>{{ step === 'credentials' ? 'Iniciar sesión' : 'Verifica tu teléfono' }}</h1>
+      <p class="intro">
+        {{ step === 'credentials'
+          ? 'Accede a tu cuenta con tu número de cuenta y contraseña.'
+          : 'Ingresa el código SMS enviado a ' + phoneHint + '.' }}
+      </p>
     </header>
 
-    <form class="login-form" (ngSubmit)="iniciarSesionConCuenta()">
-      <label for="accountNumber">Número de cuenta</label>
-      <input id="accountNumber" class="liquid-glass-input" type="text" inputmode="numeric"
-             autocomplete="username" maxlength="10" name="accountNumber"
-             placeholder="Ingresa los 10 dígitos" [(ngModel)]="accountNumber" required>
+    @if (step === 'credentials') {
+      <form class="login-form" (ngSubmit)="iniciarSesionConCuenta()">
+        <label for="accountNumber">Número de cuenta</label>
+        <input id="accountNumber" class="liquid-glass-input" type="text" inputmode="numeric"
+               autocomplete="username" maxlength="10" name="accountNumber"
+               placeholder="Ingresa los 10 dígitos" [(ngModel)]="accountNumber" required>
 
-      <label for="accountPassword">Contraseña</label>
-      <input id="accountPassword" class="liquid-glass-input" type="password"
-             autocomplete="current-password" name="accountPassword"
-             placeholder="Ingresa tu contraseña" [(ngModel)]="password" required>
+        <label for="accountPassword">Contraseña</label>
+        <input id="accountPassword" class="liquid-glass-input" type="password"
+               autocomplete="current-password" name="accountPassword"
+               placeholder="Ingresa tu contraseña" [(ngModel)]="password" required>
 
-      <button type="submit" class="liquid-glass-btn" [disabled]="loading">
-        {{ loading ? 'Iniciando sesión...' : 'Iniciar sesión' }}
-      </button>
-      <p class="error" *ngIf="errorMessage" role="alert">{{ errorMessage }}</p>
-    </form>
+        <button type="submit" class="liquid-glass-btn" [disabled]="loading">
+          {{ loading ? 'Enviando código...' : 'Continuar por SMS' }}
+        </button>
+        <p class="error" *ngIf="errorMessage" role="alert">{{ errorMessage }}</p>
+      </form>
+    } @else {
+      <form class="login-form" (ngSubmit)="verificarCodigo()">
+        <label for="loginCode">Código de verificación</label>
+        <input id="loginCode" class="liquid-glass-input verification-code" type="text"
+               inputmode="numeric" autocomplete="one-time-code" maxlength="6" name="code"
+               placeholder="123456" [(ngModel)]="code" required>
 
-    <p class="auth-switch">¿Aún no tienes cuenta? <a routerLink="/registro">Crear cuenta</a></p>
+        <button type="submit" class="liquid-glass-btn" [disabled]="loading">
+          {{ loading ? 'Verificando...' : 'Verificar e iniciar sesión' }}
+        </button>
+        <button type="button" class="secondary-btn" [disabled]="loading" (click)="reenviarCodigo()">
+          Reenviar código SMS
+        </button>
+        <button type="button" class="text-btn" [disabled]="loading" (click)="volverACredenciales()">
+          Volver a mis datos
+        </button>
+        <p class="status" *ngIf="statusMessage" role="status">{{ statusMessage }}</p>
+        <p class="error" *ngIf="errorMessage" role="alert">{{ errorMessage }}</p>
+      </form>
+    }
+
+    <p class="auth-switch" *ngIf="step === 'credentials'">¿Aún no tienes cuenta? <a routerLink="/registro">Crear cuenta</a></p>
   </section>
 </main>

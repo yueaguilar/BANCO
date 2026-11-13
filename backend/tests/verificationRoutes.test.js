@@ -100,6 +100,7 @@ async function createRig(t) {
             id: 1,
             fullname: 'Demo',
             email: 'demo@example.com',
+            phone: '5512345678',
             password: passwordHash
           }]
         }
@@ -282,8 +283,18 @@ test('verification routes use SMS, reject bad/reused codes, and require the veri
   assert.equal(reusedVerification.status, 401);
 });
 
-test('account login creates HttpOnly cookies and limits failed credential attempts', async (t) => {
+test('account login requires a valid SMS code before creating HttpOnly cookies', async (t) => {
   const rig = await createRig(t);
+  let smsBody;
+  global.fetch = async (_url, options) => {
+    smsBody = JSON.parse(options.body);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { success: true, smsBatchId: 'login-batch' } })
+    };
+  };
+
   const login = await post(rig.fetch, rig.url, '/api/auth/login', {
     accountNumber: '1234567890',
     password: 'valid-password'
@@ -291,10 +302,38 @@ test('account login creates HttpOnly cookies and limits failed credential attemp
   const loginBody = await login.json();
   assert.equal(login.status, 200);
   assert.equal(loginBody.success, true);
+  assert.equal(loginBody.requiresVerification, true);
+  assert.equal(loginBody.phoneHint, '••••5678');
   assert.equal('token' in loginBody, false);
-  assert.equal(loginBody.bankData.numeroCuenta, '1234567890');
-  assert.match(login.headers.get('set-cookie') || '', /banco_access=.*HttpOnly/);
-  assert.match(login.headers.get('set-cookie') || '', /banco_refresh=.*HttpOnly/);
+  assert.equal(login.headers.get('set-cookie'), null);
+  assert.match(smsBody.message, /\d{6}/);
+
+  const code = smsBody.message.match(/\d{6}/)[0];
+  const invalidCode = await post(rig.fetch, rig.url, '/api/auth/login/verify', {
+    accountNumber: '1234567890',
+    password: 'valid-password',
+    code: '000000'
+  });
+  assert.equal(invalidCode.status, 401);
+
+  const verifiedLogin = await post(rig.fetch, rig.url, '/api/auth/login/verify', {
+    accountNumber: '1234567890',
+    password: 'valid-password',
+    code
+  });
+  const verifiedBody = await verifiedLogin.json();
+  assert.equal(verifiedLogin.status, 200);
+  assert.equal(verifiedBody.success, true);
+  assert.equal(verifiedBody.bankData.numeroCuenta, '1234567890');
+  assert.match(verifiedLogin.headers.get('set-cookie') || '', /banco_access=.*HttpOnly/);
+  assert.match(verifiedLogin.headers.get('set-cookie') || '', /banco_refresh=.*HttpOnly/);
+
+  const reusedCode = await post(rig.fetch, rig.url, '/api/auth/login/verify', {
+    accountNumber: '1234567890',
+    password: 'valid-password',
+    code
+  });
+  assert.equal(reusedCode.status, 401);
 
   const invalidFormat = await post(rig.fetch, rig.url, '/api/auth/login', {
     accountNumber: '123',

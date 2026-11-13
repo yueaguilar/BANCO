@@ -26,6 +26,8 @@ export interface AuthSession {
 export interface AuthResponse {
   success: boolean;
   message?: string;
+  requiresVerification?: boolean;
+  phoneHint?: string;
   user?: AuthUser;
   bankData?: Record<string, unknown> | null;
   sessions?: AuthSession[];
@@ -45,6 +47,14 @@ export class AuthService {
     return this.http.post<AuthResponse>(
       `${this.authUrl}/login`,
       { accountNumber, password },
+      { withCredentials: true }
+    );
+  }
+
+  verifyLogin(accountNumber: string, password: string, code: string): Observable<AuthResponse> {
+    return this.http.post<AuthResponse>(
+      `${this.authUrl}/login/verify`,
+      { accountNumber, password, code },
       { withCredentials: true }
     );
   }

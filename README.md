@@ -97,7 +97,7 @@ En producción, configura las variables en el servicio privado del backend en Re
 
 El frontend Firebase y la API Render son orígenes distintos: usa `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=none` y configura `FRONTEND_URL` con el origen exacto del sitio (sin ruta). CORS habilita credenciales únicamente para los orígenes permitidos, y las mutaciones con cookies validan el encabezado `Origin`. Para desarrollo local usa `COOKIE_SECURE=false` y `COOKIE_SAME_SITE=lax`. El backend admite expiraciones de Access Token de 5 a 10 minutos y Refresh Token de hasta 7 días.
 
-La autenticación web guarda los JWT únicamente en cookies `HttpOnly`; el Refresh Token se almacena como hash en `auth_sessions` y se rota en cada renovación. Las sesiones vencen tras 15 minutos sin actividad (configurable entre 1 y 60 minutos mediante `SESSION_IDLE_TIMEOUT_MINUTES`); el backend verifica la inactividad al autenticar y renovar, y limpia periódicamente las sesiones vencidas. El servicio también revoca la sesión si detecta la reutilización de un token anterior. El endpoint de envío de SMS admite hasta cinco solicitudes por IP cada 15 minutos y conserva el límite adicional de un envío por teléfono cada minuto.
+La autenticación web requiere verificar por SMS tanto al iniciar sesión como al crear una cuenta. Los JWT se guardan únicamente en cookies `HttpOnly`; el Refresh Token se almacena como hash en `auth_sessions` y se rota en cada renovación. Las sesiones vencen tras 15 minutos sin actividad (configurable entre 1 y 60 minutos mediante `SESSION_IDLE_TIMEOUT_MINUTES`); el backend verifica la inactividad al autenticar y renovar, y limpia periódicamente las sesiones vencidas. El servicio también revoca la sesión si detecta la reutilización de un token anterior. El endpoint de envío de SMS admite hasta cinco solicitudes por IP cada 15 minutos y conserva el límite adicional de un envío por teléfono cada minuto.
 
 ---
 
@@ -107,6 +107,7 @@ Rutas relevantes:
 
 - `POST /api/auth` — registro e inicio de sesión
 - `POST /api/auth/login` — inicio de sesión con número de cuenta y contraseña
+- `POST /api/auth/login/verify` — confirma el inicio de sesión mediante el código SMS
 - `POST /api/auth/refresh` — rotación del Refresh Token y emisión de un nuevo Access Token
 - `POST /api/auth/logout` — cierre de la sesión actual
 - `POST /api/auth/logout-all` — cierre de todas las sesiones de la cuenta
