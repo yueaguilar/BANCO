@@ -327,8 +327,7 @@ label.small {
   color: var(--danger);
 }
 
-#transactionList .transaction-item,
-#modalList.transaction-list .transaction-item {
+.transaction-list .transaction-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -345,28 +344,24 @@ label.small {
   color: var(--text);
 }
 
-#transactionList .transaction-item:last-child,
-#modalList.transaction-list .transaction-item:last-child {
+.transaction-list .transaction-item:last-child {
   margin-bottom: 0;
 }
 
-#transactionList .transaction-item.empty-state,
-#modalList.transaction-list .transaction-item.empty-state {
+.transaction-list .transaction-item.empty-state {
   justify-content: flex-start;
   color: var(--muted);
   line-height: 1.5;
 }
 
-#transactionList .transaction-left,
-#modalList.transaction-list .transaction-left {
+.transaction-list .transaction-left {
   display: flex;
   align-items: center;
   gap: 12px;
   min-width: 0;
 }
 
-#transactionList .transaction-icon,
-#modalList.transaction-list .transaction-icon {
+.transaction-list .transaction-icon {
   display: flex;
   flex: 0 0 42px;
   align-items: center;
@@ -379,20 +374,17 @@ label.small {
   font-weight: 800;
 }
 
-#transactionList .transaction-icon.income,
-#modalList.transaction-list .transaction-icon.income {
+.transaction-list .transaction-icon.income {
   background: rgba(142, 240, 176, 0.15);
   color: var(--success);
 }
 
-#transactionList .transaction-icon.expense,
-#modalList.transaction-list .transaction-icon.expense {
+.transaction-list .transaction-icon.expense {
   background: rgba(255, 140, 168, 0.12);
   color: var(--danger);
 }
 
-#transactionList .transaction-left > div,
-#modalList.transaction-list .transaction-left > div {
+.transaction-list .transaction-left > div {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -400,20 +392,17 @@ label.small {
   min-width: 0;
 }
 
-#transactionList .transaction-left strong,
-#modalList.transaction-list .transaction-left strong {
+.transaction-list .transaction-left strong {
   color: var(--text);
   line-height: 1.35;
 }
 
-#transactionList .transaction-left .movement-kind,
-#modalList.transaction-list .transaction-left .movement-kind {
+.transaction-list .transaction-left .movement-kind {
   margin: 0;
   padding: 4px 9px;
 }
 
-#transactionList .transaction-right,
-#modalList.transaction-list .transaction-right {
+.transaction-list .transaction-right {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
@@ -423,8 +412,7 @@ label.small {
   text-align: right;
 }
 
-#transactionList .transaction-right .amount,
-#modalList.transaction-list .transaction-right .amount {
+.transaction-list .transaction-right .amount {
   display: inline-flex;
   align-items: center;
   padding: 7px 10px;
@@ -436,21 +424,19 @@ label.small {
   white-space: nowrap;
 }
 
-#transactionList .transaction-right .amount.positive,
-#modalList.transaction-list .transaction-right .amount.positive {
+.transaction-list .transaction-right .amount.positive {
   border-color: rgba(142, 240, 176, 0.2);
   background: rgba(142, 240, 176, 0.07);
   color: var(--success);
 }
 
-#transactionList .transaction-right .amount.negative,
-#modalList.transaction-list .transaction-right .amount.negative {
+.transaction-list .transaction-right .amount.negative {
   border-color: rgba(255, 140, 168, 0.18);
   background: rgba(255, 140, 168, 0.06);
   color: var(--danger);
 }
 
-#movementList .movement-item {
+.movement-list .movement-item {
   position: relative;
   display: flex;
   align-items: center;
@@ -471,11 +457,11 @@ label.small {
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-#movementList .movement-item:last-child {
+.movement-list .movement-item:last-child {
   margin-bottom: 0;
 }
 
-#movementList .movement-item:not(.empty-state):hover {
+.movement-list .movement-item:not(.empty-state):hover {
   transform: translateY(-2px);
   border-color: rgba(201, 246, 255, 0.3);
   box-shadow:
@@ -484,14 +470,14 @@ label.small {
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
-#movementList .movement-left {
+.movement-list .movement-left {
   display: flex;
   align-items: center;
   gap: 12px;
   min-width: 0;
 }
 
-#movementList .movement-left > div {
+.movement-list .movement-left > div {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -499,13 +485,13 @@ label.small {
   min-width: 0;
 }
 
-#movementList .movement-left strong {
+.movement-list .movement-left strong {
   display: block;
   color: var(--text);
   line-height: 1.35;
 }
 
-#movementList .movement-icon {
+.movement-list .movement-icon {
   display: flex;
   flex: 0 0 42px;
   align-items: center;
@@ -518,22 +504,22 @@ label.small {
   font-weight: 800;
 }
 
-#movementList .movement-icon.income {
+.movement-list .movement-icon.income {
   background: rgba(142, 240, 176, 0.15);
   color: var(--success);
 }
 
-#movementList .movement-icon.transfer {
+.movement-list .movement-icon.transfer {
   background: rgba(144, 224, 239, 0.18);
   color: var(--primary-strong);
 }
 
-#movementList .movement-kind {
+.movement-list .movement-kind {
   margin: 0;
   padding: 4px 9px;
 }
 
-#movementList .movement-right {
+.movement-list .movement-right {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
@@ -542,13 +528,13 @@ label.small {
   text-align: right;
 }
 
-#movementList .movement-right small {
+.movement-list .movement-right small {
   display: block;
   margin: 0;
   color: var(--muted);
 }
 
-#movementList .movement-right .amount {
+.movement-list .movement-right .amount {
   display: inline-flex;
   align-items: center;
   padding: 7px 10px;
@@ -562,48 +548,86 @@ label.small {
   white-space: nowrap;
 }
 
-#movementList .movement-right .amount.positive {
+.movement-list .movement-right .amount.positive {
   border-color: rgba(142, 240, 176, 0.2);
   background: rgba(142, 240, 176, 0.07);
   color: var(--success);
 }
 
-#movementList .movement-right .amount.negative {
+.movement-list .movement-right .amount.negative {
   border-color: rgba(255, 140, 168, 0.18);
   background: rgba(255, 140, 168, 0.06);
   color: var(--danger);
 }
 
-#movementList .movement-item.empty-state {
+.movement-list .movement-item.empty-state {
   color: var(--muted);
 }
 
 @media (max-width: 600px) {
-  #transactionList .transaction-item:not(.empty-state),
-  #modalList.transaction-list .transaction-item:not(.empty-state) {
+  .transaction-list .transaction-item:not(.empty-state) {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .transaction-list .transaction-left {
+    flex: 1 1 auto;
+    gap: 9px;
+  }
+
+  .transaction-list .transaction-left > div {
+    gap: 4px;
+  }
+
+  .transaction-list .transaction-left strong,
+  .transaction-list .transaction-left small {
+    overflow-wrap: anywhere;
+  }
+
+  .transaction-list .transaction-right {
+    flex: 0 0 auto;
+    text-align: right;
+  }
+
+  .movement-list .movement-item:not(.empty-state) {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .movement-list .movement-left {
+    flex: 1 1 auto;
+    gap: 9px;
+  }
+
+  .movement-list .movement-left strong {
+    overflow-wrap: anywhere;
+  }
+
+  .movement-list .movement-right {
+    flex: 0 0 auto;
+    max-width: 44%;
+  }
+
+  .movement-list .movement-right small {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 360px) {
+  .transaction-list .transaction-item:not(.empty-state),
+  .movement-list .movement-item:not(.empty-state) {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  #transactionList .transaction-right,
-  #modalList.transaction-list .transaction-right {
+  .transaction-list .transaction-right,
+  .movement-list .movement-right {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    text-align: left;
-  }
-
-  #movementList .movement-item:not(.empty-state) {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  #movementList .movement-right {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
+    max-width: none;
     text-align: left;
   }
 }
