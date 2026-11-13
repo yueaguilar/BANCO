@@ -32,6 +32,7 @@ const {
     getCookieOptions,
     getAccessToken,
     getRefreshToken,
+    getSessionIdleTimeoutMinutes,
     verifyAccessToken,
     verifyRefreshToken,
     createSession,
@@ -1271,6 +1272,9 @@ if (require.main === module) {
     if (!getTokenConfiguration()) {
         missingConfig.push('JWT_ACCESS_SECRET/JWT_REFRESH_SECRET/JWT_*_EXPIRES_IN');
     }
+    if (!getSessionIdleTimeoutMinutes()) {
+        missingConfig.push('SESSION_IDLE_TIMEOUT_MINUTES (1-60)');
+    }
     if (isProduction) {
         try {
             const cookieOptions = getCookieOptions();
@@ -1296,7 +1300,10 @@ if (require.main === module) {
                 try {
                     await pool.query(
                         `UPDATE auth_sessions SET status = 'expired', revoked_at = NOW()
-                         WHERE status = 'active' AND expires_at <= NOW()`
+                         WHERE status = 'active'
+                           AND (expires_at <= NOW()
+                             OR last_activity <= NOW() - ($1 * INTERVAL '1 minute'))`,
+                        [getSessionIdleTimeoutMinutes()]
                     );
                     await pool.query(
                         `DELETE FROM auth_login_attempts
@@ -1307,7 +1314,7 @@ if (require.main === module) {
                 }
             };
             void expireSessions();
-            const sessionCleanup = setInterval(expireSessions, 15 * 60 * 1000);
+            const sessionCleanup = setInterval(expireSessions, 60 * 1000);
             sessionCleanup.unref();
         })
         .catch((err) => {

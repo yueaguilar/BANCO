@@ -4,7 +4,8 @@ const {
     TOKEN_ISSUER,
     TOKEN_AUDIENCE,
     getAccessToken,
-    getTokenConfiguration
+    getTokenConfiguration,
+    getSessionIdleTimeoutMinutes
 } = require('../services/sessionService');
 
 async function authenticateUser(req, res, next) {
@@ -26,6 +27,10 @@ async function authenticateUser(req, res, next) {
         if (!config) {
             return res.status(503).json({ success: false, message: 'La autenticación no está configurada.' });
         }
+        const idleTimeoutMinutes = getSessionIdleTimeoutMinutes();
+        if (!idleTimeoutMinutes) {
+            return res.status(503).json({ success: false, message: 'La duración de la sesión no está configurada correctamente.' });
+        }
 
         try {
             const payload = jwt.verify(cookieToken, config.accessSecret, {
@@ -44,8 +49,9 @@ async function authenticateUser(req, res, next) {
                 `UPDATE auth_sessions
                  SET last_activity = NOW()
                  WHERE id = $1 AND user_id = $2 AND status = 'active' AND expires_at > NOW()
+                   AND last_activity > NOW() - ($3 * INTERVAL '1 minute')
                  RETURNING id`,
-                [sessionId, userId]
+                [sessionId, userId, idleTimeoutMinutes]
             );
             if (rows.length === 0) {
                 return res.status(401).json({ success: false, message: 'La sesión no es válida o expiró.' });

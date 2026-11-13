@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
-import { LoginBanco } from './componentes/login-banco/login'; // <-- ajusta esta ruta a tu carpeta real
+import { LoginBanco } from './componentes/login-banco/login';
+import { SignupBanco } from './componentes/signup-banco/signup';
 import { Principal } from './componentes/app-banco/app';
 import { Cuenta } from './componentes/cuenta-banco/cuenta';
 import { Mas } from './componentes/mas-banco/mas';
@@ -17,6 +18,8 @@ import { authGuard } from './services/auth.guard';
 export const routes: Routes = [
   { path: '', redirectTo: 'login', pathMatch: 'full' },
   { path: 'login', component: LoginBanco },
+  { path: 'registro', component: SignupBanco },
+  { path: 'signup', redirectTo: 'registro' },
   { path: 'app', component: Principal, canActivate: [authGuard] },
   { path: 'deposito-contador', component: DepositoContador, canActivate: [authGuard] },
   { path: 'cuenta', component: Cuenta, canActivate: [authGuard] },

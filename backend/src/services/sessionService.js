@@ -6,6 +6,15 @@ const REFRESH_COOKIE = 'banco_refresh';
 const TOKEN_ISSUER = 'banco-kike-api';
 const TOKEN_AUDIENCE = 'banco-kike-web';
 
+function getSessionIdleTimeoutMinutes() {
+    const configuredTimeout = process.env.SESSION_IDLE_TIMEOUT_MINUTES;
+    if (configuredTimeout === undefined) return 15;
+    if (!/^\d+$/.test(configuredTimeout)) return null;
+
+    const timeoutMinutes = Number(configuredTimeout);
+    return timeoutMinutes >= 1 && timeoutMinutes <= 60 ? timeoutMinutes : null;
+}
+
 function getTokenConfiguration() {
     const accessSecret = process.env.JWT_ACCESS_SECRET;
     const refreshSecret = process.env.JWT_REFRESH_SECRET;
@@ -204,7 +213,7 @@ async function rotateRefreshToken(pool, token) {
         await client.query('BEGIN');
         transactionStarted = true;
         const { rows } = await client.query(
-            `SELECT id, user_id, refresh_token_hash, expires_at, status
+            `SELECT id, user_id, refresh_token_hash, expires_at, status, last_activity
              FROM auth_sessions
              WHERE id = $1 AND user_id = $2
              FOR UPDATE`,
@@ -219,6 +228,19 @@ async function rotateRefreshToken(pool, token) {
 
         const expiresAt = new Date(session.expires_at);
         if (expiresAt.getTime() <= Date.now() + 1000) {
+            await client.query(
+                `UPDATE auth_sessions SET status = 'expired', revoked_at = NOW()
+                 WHERE id = $1 AND status = 'active'`,
+                [sessionId]
+            );
+            await client.query('COMMIT');
+            transactionStarted = false;
+            return { ok: false, status: 401 };
+        }
+
+        const idleTimeoutMinutes = getSessionIdleTimeoutMinutes();
+        if (!idleTimeoutMinutes
+            || Date.now() - new Date(session.last_activity).getTime() >= idleTimeoutMinutes * 60 * 1000) {
             await client.query(
                 `UPDATE auth_sessions SET status = 'expired', revoked_at = NOW()
                  WHERE id = $1 AND status = 'active'`,
@@ -265,6 +287,7 @@ module.exports = {
     REFRESH_COOKIE,
     TOKEN_ISSUER,
     TOKEN_AUDIENCE,
+    getSessionIdleTimeoutMinutes,
     getTokenConfiguration,
     getCookieOptions,
     getAccessToken,

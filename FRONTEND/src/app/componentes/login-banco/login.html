@@ -1,80 +1,29 @@
-<div class="inicio">
-    <h1 id="titulo">Inicio de sesión o Registro de nueva cuenta</h1>
-    <img src="/logo2.png" alt="Logo" class="logo">
-</div>
+<main class="auth-shell">
+  <section class="auth-card">
+    <header class="auth-header">
+      <img src="/logo2.png" alt="Logo de Banco LCDK" class="logo">
+      <p class="eyebrow">Bienvenido de nuevo</p>
+      <h1>Iniciar sesión</h1>
+      <p class="intro">Accede a tu cuenta con tu número de cuenta y contraseña.</p>
+    </header>
 
-<div class="info" *ngIf="step === 'form'">
-    <form class="login-form" *ngIf="accountLoginMode" (ngSubmit)="iniciarSesionConCuenta()">
-        <input class="liquid-glass-input" type="text" inputmode="numeric" maxlength="10"
-               name="accountNumber" placeholder="Número de cuenta" [(ngModel)]="accountNumber" required>
-        <input class="liquid-glass-input" type="password" name="accountPassword"
-               placeholder="Contraseña" [(ngModel)]="password" required>
-        <button type="submit" class="correo liquid-glass-btn" [disabled]="loading">
-            {{ loading ? 'Iniciando sesión...' : 'Iniciar sesión' }}
-        </button>
-        <button type="button" class="correo liquid-glass-btn" (click)="accountLoginMode = false">
-            Crear cuenta con verificación SMS
-        </button>
-        <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+    <form class="login-form" (ngSubmit)="iniciarSesionConCuenta()">
+      <label for="accountNumber">Número de cuenta</label>
+      <input id="accountNumber" class="liquid-glass-input" type="text" inputmode="numeric"
+             autocomplete="username" maxlength="10" name="accountNumber"
+             placeholder="Ingresa los 10 dígitos" [(ngModel)]="accountNumber" required>
+
+      <label for="accountPassword">Contraseña</label>
+      <input id="accountPassword" class="liquid-glass-input" type="password"
+             autocomplete="current-password" name="accountPassword"
+             placeholder="Ingresa tu contraseña" [(ngModel)]="password" required>
+
+      <button type="submit" class="liquid-glass-btn" [disabled]="loading">
+        {{ loading ? 'Iniciando sesión...' : 'Iniciar sesión' }}
+      </button>
+      <p class="error" *ngIf="errorMessage" role="alert">{{ errorMessage }}</p>
     </form>
-    <form id="auth-form" class="login-form" *ngIf="!accountLoginMode" (ngSubmit)="enviarCodigo()" novalidate>
-        <input id="email" class="correo liquid-glass-input" type="email" name="email"
-               placeholder="Correo electrónico" [(ngModel)]="email">
 
-        <input id="fullname" class="liquid-glass-input" type="text" name="fullname"
-               placeholder="Nombre completo" [(ngModel)]="fullname">
-
-        <label class="small" for="birthdate">Fecha de nacimiento</label>
-        <input id="birthdate" class="liquid-glass-input" type="date" name="birthdate"
-               [(ngModel)]="birthdate">
-
-        <input id="phone" class="liquid-glass-input" type="tel" inputmode="tel" autocomplete="tel"
-               maxlength="13" name="phone" placeholder="+52 55 1234 5678"
-               aria-describedby="phone-help phone-error" [attr.aria-invalid]="phoneError ? 'true' : null"
-               [(ngModel)]="phone" (input)="soloNumeros()" (blur)="validarTelefono()">
-        <p id="phone-help" class="small">Incluye +52 y los 10 dígitos de tu celular. También puedes escribir solo los 10 dígitos.</p>
-        <p id="phone-error" class="error" *ngIf="phoneError" aria-live="polite">{{ phoneError }}</p>
-
-        <div class="password-row">
-            <input id="password" class="liquid-glass-input"
-                   [type]="mostrarPassword ? 'text' : 'password'" name="password"
-                   placeholder="Contraseña" [(ngModel)]="password">
-            <label class="toggle-label">
-                <input id="toggle-password" type="checkbox" name="togglePassword"
-                       [(ngModel)]="mostrarPassword"> Mostrar
-            </label>
-        </div>
-
-        <button type="submit" class="correo liquid-glass-btn" [disabled]="loading">
-            {{ loading ? 'Enviando...' : 'Enviar código SMS' }}
-        </button>
-
-        <button type="button" class="correo liquid-glass-btn" (click)="accountLoginMode = true">
-            Ya tengo cuenta
-        </button>
-
-        <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
-    </form>
-</div>
-
-<div class="info" *ngIf="step === 'code'">
-    <form id="code-form" class="login-form" (ngSubmit)="verificarYAutenticar()">
-        <p class="small">Ingresa el código SMS que enviamos al número {{ phone }}</p>
-
-        <input id="code" class="liquid-glass-input" type="text" inputmode="numeric" maxlength="6"
-               name="code" placeholder="Código de verificación" [(ngModel)]="code" required>
-
-        <input class="liquid-glass-input" type="email" name="verifiedEmail"
-               placeholder="Correo electrónico para tu cuenta" [(ngModel)]="email" required>
-        <input class="liquid-glass-input" type="password" name="verifiedPassword"
-               placeholder="Contraseña" [(ngModel)]="password" required>
-
-        <button type="submit" class="correo liquid-glass-btn" [disabled]="loading">
-            {{ loading ? 'Verificando...' : 'Verificar e iniciar sesión' }}
-        </button>
-
-        <button type="button" class="correo liquid-glass-btn" (click)="volver()">Volver</button>
-
-        <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
-    </form>
-</div>
+    <p class="auth-switch">¿Aún no tienes cuenta? <a routerLink="/registro">Crear cuenta</a></p>
+  </section>
+</main>

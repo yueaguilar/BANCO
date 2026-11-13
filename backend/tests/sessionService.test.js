@@ -8,7 +8,8 @@ const {
     createSession,
     hashRefreshToken,
     rotateRefreshToken,
-    getCookieOptions
+    getCookieOptions,
+    getSessionIdleTimeoutMinutes
 } = require('../src/services/sessionService');
 
 const originalEnvironment = {
@@ -16,6 +17,7 @@ const originalEnvironment = {
     refreshSecret: process.env.JWT_REFRESH_SECRET,
     accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN,
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
+    sessionIdleTimeoutMinutes: process.env.SESSION_IDLE_TIMEOUT_MINUTES,
     cookieSecure: process.env.COOKIE_SECURE,
     cookieSameSite: process.env.COOKIE_SAME_SITE,
     nodeEnv: process.env.NODE_ENV
@@ -25,6 +27,7 @@ process.env.JWT_ACCESS_SECRET = 'session-test-access-secret-with-more-than-32-by
 process.env.JWT_REFRESH_SECRET = 'session-test-refresh-secret-with-more-than-32-bytes';
 process.env.JWT_ACCESS_EXPIRES_IN = '10m';
 process.env.JWT_REFRESH_EXPIRES_IN = '7d';
+process.env.SESSION_IDLE_TIMEOUT_MINUTES = '15';
 process.env.COOKIE_SECURE = 'true';
 process.env.COOKIE_SAME_SITE = 'none';
 process.env.NODE_ENV = 'production';
@@ -35,6 +38,7 @@ test.after(() => {
         ['JWT_REFRESH_SECRET', originalEnvironment.refreshSecret],
         ['JWT_ACCESS_EXPIRES_IN', originalEnvironment.accessExpiresIn],
         ['JWT_REFRESH_EXPIRES_IN', originalEnvironment.refreshExpiresIn],
+        ['SESSION_IDLE_TIMEOUT_MINUTES', originalEnvironment.sessionIdleTimeoutMinutes],
         ['COOKIE_SECURE', originalEnvironment.cookieSecure],
         ['COOKIE_SAME_SITE', originalEnvironment.cookieSameSite],
         ['NODE_ENV', originalEnvironment.nodeEnv]
@@ -56,6 +60,7 @@ function createPool() {
                 user_id: userId,
                 refresh_token_hash: tokenHash,
                 expires_at: expiresAt,
+                last_activity: new Date(),
                 status: 'active',
                 device_info: JSON.parse(deviceInfo)
             });
@@ -169,6 +174,28 @@ test('expires sessions and rejects refresh after revocation', async () => {
     const revocation = await rotateRefreshToken(revokedPool, revoked.refreshToken);
     assert.equal(revocation.ok, false);
     assert.equal(revocation.status, 401);
+});
+
+test('expires idle sessions and rejects refresh', async () => {
+    const pool = createPool();
+    const session = await createSession(pool, 31, request());
+    pool.sessions.get(session.sessionId).last_activity = new Date(Date.now() - 15 * 60 * 1000);
+
+    const result = await rotateRefreshToken(pool, session.refreshToken);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 401);
+    assert.equal(pool.sessions.get(session.sessionId).status, 'expired');
+});
+
+test('uses a bounded configurable inactivity timeout', () => {
+    delete process.env.SESSION_IDLE_TIMEOUT_MINUTES;
+    assert.equal(getSessionIdleTimeoutMinutes(), 15);
+    process.env.SESSION_IDLE_TIMEOUT_MINUTES = '20';
+    assert.equal(getSessionIdleTimeoutMinutes(), 20);
+    process.env.SESSION_IDLE_TIMEOUT_MINUTES = '61';
+    assert.equal(getSessionIdleTimeoutMinutes(), null);
+    delete process.env.SESSION_IDLE_TIMEOUT_MINUTES;
 });
 
 test('rejects unsafe access-token lifetimes and cross-site cookies without Secure', () => {
